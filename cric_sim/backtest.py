@@ -70,17 +70,33 @@ class BTConfig:
     prior_scale: float = 1.0
     mean_preserving: bool = False  # cancel the score drift caused by day-to-day swings
     empirical_lineup: bool = False  # draw batting positions and bowling overs from each player's real history
+    real_subs: bool = True  # use the recorded impact sub (who came on); the starting XI is then exact
+    real_sub_out: bool = False  # also use who went off (decided during the match, so off by default)
+    recent_pitch: bool = False  # adjust for how the ground has played in the last ``recent_days``
+    recent_days: int = 60
+    recent_S: float = 1500.0
     mix_form_decay: float = 0.9  # decay of the form estimate used INSIDE the simulator/form mix (the reported
     # "form baseline" always uses the fixed 0.9 rule so results stay comparable)
 
 
 def _team_xi(names, sub, hist):
-    """Return (starting XI names, impact (in, out) or None)."""
+    """Return (starting XI names, impact (in, out) or None). ``out`` may be None (to be guessed)."""
     if len(names) == 11:
         return list(names), None
     if len(names) == 12 and sub:
         return [n for n in names if n != sub[0]], sub
     return None, None
+
+
+def _guess_out(xi, first, on_field, hist, roles):
+    """Who the impact sub most likely replaced. Batting-first team: a batter who has batted (not the keeper).
+    Chasing team: a bowler who has bowled."""
+    h = lambda n, k: hist.get(n, {}).get(k, 0.0)
+    if first:
+        pool = [n for n in xi if n in on_field and roles.get(n) != "WK"] or xi
+        return min(pool, key=lambda n: (h(n, "bowl_balls"), -h(n, "bat_balls")))
+    pool = [n for n in xi if n in on_field] or xi
+    return max(pool, key=lambda n: h(n, "bowl_balls") - 0.1 * h(n, "bat_balls"))
 
 
 def _impact_rate(matches: pd.DataFrame, before: pd.Timestamp, league: str | None = None) -> float:
@@ -154,11 +170,20 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
         p_imp = _impact_rate(ms, r.date, r.league) if model.has("impact") else 0.0
         for team_name, names, first in ((r.team_a, r.players_a, True), (r.team_b, r.players_b, False)):
             sub = None
-            for x in r.replacements:  # only present if the data says who was substituted
-                if x["team"] == team_name and x["in"] in names and x["out"] in names:
-                    sub = (x["in"], x["out"])
-                    break
+            if cfg.real_subs:
+                for x in r.replacements:
+                    if (x["team"] == team_name and x.get("reason") in ("impact_player", "concussion_substitute", None)
+                            and x["in"] in names and x["out"] in names):
+                        sub = (x["in"], x["out"] if cfg.real_sub_out else None)
+                        break
             xi, imp = _team_xi(names, sub, hist)
+            if xi is not None and imp is not None and imp[1] is None:
+                mb = by_match.get(r.match_id)
+                if mb is None:
+                    mb = by_match[r.match_id] = balls_f[balls_f["match_id"] == r.match_id]
+                on_field = (set(mb.loc[mb["innings"] == 1, "batter"]) | set(mb.loc[mb["innings"] == 1, "non_striker"])) if first \
+                    else set(mb.loc[mb["innings"] == 1, "bowler"])
+                imp = (imp[0], _guess_out(xi, first, on_field, hist, roles))
             if xi is None:
                 if len(names) < 11:
                     ok = False
@@ -179,14 +204,7 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
                 cands = [n for n in names if n not in on_field] or list(names)
                 sub_name = min(cands, key=lambda n: recent.get(n, 99))  # newcomers are assumed to start
                 xi = [n for n in names if n != sub_name][:11]
-                h = lambda n, k: hist.get(n, {}).get(k, 0.0)
-                if first:  # bowling sub replaces a batter who has already batted (not the keeper)
-                    pool = [n for n in xi if n in on_field and roles.get(n) != "WK"] or xi
-                    out = min(pool, key=lambda n: (h(n, "bowl_balls"), -h(n, "bat_balls")))
-                else:  # batting sub replaces a bowler who has already bowled
-                    pool = [n for n in xi if n in on_field] or xi
-                    out = max(pool, key=lambda n: h(n, "bowl_balls") - 0.1 * h(n, "bat_balls"))
-                imp = (sub_name, out)
+                imp = (sub_name, _guess_out(xi, first, on_field, hist, roles))
             teams.append((team_name, xi, imp))
         if not ok:
             continue
@@ -214,7 +232,13 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
                               bowl_weights=bowl_w, pos_hist=pos_hist, phase_overs=phase_ov))
         ta, tb = built
 
-        sim = simulate(model, ta, tb, n_sims=cfg.sims, seed=int(rng.integers(1 << 31)), venue=r.venue_key, league=r.league)
+        adj = None
+        if cfg.recent_pitch:
+            lo = r.date - pd.Timedelta(days=cfg.recent_days)
+            rec = balls_f[(balls_f["venue_key"] == r.venue_key) & (balls_f["date"] < r.date) & (balls_f["date"] >= lo)]
+            adj = model.recent_pitch(rec, cfg.recent_S) if len(rec) else None
+        sim = simulate(model, ta, tb, n_sims=cfg.sims, seed=int(rng.integers(1 << 31)), venue=r.venue_key, league=r.league,
+                       afternoon=bool(getattr(r, "afternoon", False)), pitch_adj=adj)
         plist = sim["players"]
         names = [p.name for p in plist]
         idx_of = {n: i for i, n in enumerate(names)}

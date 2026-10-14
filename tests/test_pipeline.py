@@ -1,5 +1,7 @@
 import json
 
+import pandas as pd
+
 import numpy as np
 import pytest
 
@@ -332,3 +334,53 @@ def test_pooling_drops_associate_nation_matches(tmp_path):
         balls, matches = load_many([folder])
         if len(matches) == 0:
             raise ValueError("all matches filtered out")
+
+
+# ---------------------------------------------------------------- confirmed lineups and conditions
+def _mini_match(path, date, match_number, with_sub=False):
+    d = lambda b, w, ns, r: {"batter": b, "bowler": w, "non_striker": ns, "runs": {"batter": r, "extras": 0, "total": r}}
+    inn1 = [d("A", "B1", "C", 1) for _ in range(6)]
+    inn2 = [d("B1", "A", "B2", 0) for _ in range(6)]
+    if with_sub:
+        inn2[0]["replacements"] = {"match": [{"in": "S", "out": "C", "team": "X", "reason": "impact_player"}]}
+    m = {"info": {"dates": [date], "venue": "V, City", "teams": ["X", "Y"], "event": {"name": "L", "match_number": match_number},
+                  "players": {"X": ["A", "C", "D"] + (["S"] if with_sub else []), "Y": ["B1", "B2"]},
+                  "toss": {"winner": "X", "decision": "bat"}, "outcome": {"winner": "X"}},
+         "innings": [{"team": "X", "overs": [{"over": 0, "deliveries": inn1}]},
+                     {"team": "Y", "overs": [{"over": 0, "deliveries": inn2}]}]}
+    path.write_text(json.dumps(m))
+
+
+def test_substitutions_on_deliveries_and_afternoon_games(tmp_path):
+    _mini_match(tmp_path / "1.json", "2024-04-06", 19, with_sub=True)
+    _mini_match(tmp_path / "2.json", "2024-04-06", 20)
+    _mini_match(tmp_path / "3.json", "2024-04-07", 21)
+    balls, matches = load_matches(tmp_path)
+    m = matches.set_index("match_id")
+    rep = m.loc["1", "replacements"]
+    assert rep and rep[0]["in"] == "S" and rep[0]["out"] == "C" and rep[0]["reason"] == "impact_player" and rep[0]["innings"] == 2
+    assert bool(m.loc["1", "afternoon"]) and not bool(m.loc["2", "afternoon"]) and not bool(m.loc["3", "afternoon"])
+    assert set(balls.loc[balls.match_id == "1", "afternoon"]) == {True}
+
+
+def test_recent_pitch_reads_how_the_ground_is_playing(world):
+    bf = world["bf"]
+    no_ground = RateModel(features=("type", "innings", "state")).fit(bf, TYPES)  # knows nothing about grounds
+    last = bf["date"].max()
+    recent = lambda v: bf[(bf.venue_key == v) & (bf.date > last - pd.Timedelta(days=400))]
+    hi = no_ground.recent_pitch(recent("High Ground"), S=300)
+    spin = no_ground.recent_pitch(recent("Spin Ground"), S=300)
+    assert hi[4] > 1.05 and hi[5] > 1.05  # more fours and sixes than the model expects
+    assert spin[6] > 1.05  # more wickets
+    assert np.allclose(no_ground.recent_pitch(bf.iloc[0:0]), 1.0)  # no recent matches: no change
+    sim_hi = simulate(no_ground, make_team(0), make_team(1), 1000, 3, "High Ground", pitch_adj=hi)
+    sim_0 = simulate(no_ground, make_team(0), make_team(1), 1000, 3, "High Ground")
+    assert sim_hi["avg_score_a"] > sim_0["avg_score_a"] + 5
+
+
+def test_backtest_with_real_subs_and_recent_pitch(world):
+    bf, st = prepare(world["balls"], world["matches"])
+    cfg = BTConfig(n_test=4, sims=100, refit_every=4, types_override=TYPES, random_draws=2, real_subs=True,
+                   recent_pitch=True, empirical_lineup=True, features=("lineup", "venue", "type", "innings", "impact", "daynight"))
+    df = run_backtest(bf, world["matches"], st, cfg)
+    assert len(df) == 4 and df["pts_model"].notna().all()

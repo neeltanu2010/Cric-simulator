@@ -39,6 +39,7 @@ def _parse_match(path: Path) -> tuple[list[dict], dict | None]:
     vkey = venue_key(venue)
     rows: list[dict] = []
     teams_batting: list[str] = []
+    match_repl: list[dict] = []  # substitutions recorded on the delivery where they happened
     for inn_no, inn in enumerate(m.get("innings", []), start=1):
         if inn.get("super_over"):
             continue
@@ -52,6 +53,9 @@ def _parse_match(path: Path) -> tuple[list[dict], dict | None]:
                 w = wk[0] if wk else {}
                 kind = w.get("kind")
                 fielders = [f.get("name") for f in w.get("fielders", []) if f.get("name")]
+                for rp in (d.get("replacements") or {}).get("match", []):
+                    match_repl.append({"in": rp.get("in"), "out": rp.get("out"), "team": rp.get("team"),
+                                       "reason": rp.get("reason"), "innings": inn_no, "over": ov})
                 rows.append({
                     "match_id": match_id, "date": date, "venue": venue, "venue_key": vkey,
                     "innings": inn_no, "team": team, "over": ov, "ball": k,
@@ -75,10 +79,10 @@ def _parse_match(path: Path) -> tuple[list[dict], dict | None]:
     players = info.get("players", {})
     bat_first = teams_batting[0]
     other = next((t for t in teams if t != bat_first), None)
-    repl = []
-    for r in (info.get("replacements") or {}).get("match", []):
+    repl = list(match_repl)
+    for r in (info.get("replacements") or {}).get("match", []):  # older files keep them in the header
         repl.append({"in": r.get("in"), "out": r.get("out"), "team": r.get("team"),
-                     "reason": r.get("reason")})
+                     "reason": r.get("reason"), "innings": None, "over": None})
     meta = {
         "match_id": match_id, "date": date, "venue": venue, "venue_key": vkey,
         "city": info.get("city"), "season": str(info.get("season", "")),
@@ -87,6 +91,7 @@ def _parse_match(path: Path) -> tuple[list[dict], dict | None]:
         "winner": outcome.get("winner"),
         "players_a": players.get(bat_first, []), "players_b": players.get(other, []),
         "replacements": repl,
+        "match_number": (info.get("event") or {}).get("match_number") if isinstance(info.get("event"), dict) else None,
     }
     return rows, meta
 
@@ -118,7 +123,22 @@ def load_matches(folder: str | Path, limit: int | None = None) -> tuple[pd.DataF
     league = Path(folder).name.removesuffix("_json")
     balls["league"] = league
     matches["league"] = league
+    matches["afternoon"] = afternoon_flags(matches)
+    balls["afternoon"] = balls["match_id"].map(dict(zip(matches["match_id"], matches["afternoon"]))).fillna(False).astype(bool)
     return balls, matches
+
+
+def afternoon_flags(matches: pd.DataFrame) -> pd.Series:
+    """On a day with two matches in the same league (an IPL double-header) the lower match number is the
+    afternoon game: no evening dew. Known from the fixture list, so it is fair pre-match information."""
+    out = pd.Series(False, index=matches.index)
+    if "match_number" not in matches.columns:
+        return out
+    mn = pd.to_numeric(matches["match_number"], errors="coerce")
+    for _, g in matches.assign(mn=mn).groupby(["league", "date"] if "league" in matches.columns else ["date"]):
+        if len(g) >= 2 and g["mn"].notna().all():
+            out.loc[g["mn"].idxmin()] = True
+    return out
 
 
 def load_many(folders: list[str | Path], full_members_only: tuple[str, ...] = ("t20s",)):

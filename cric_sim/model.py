@@ -26,7 +26,7 @@ from .players import PACE, SPIN, UNKNOWN
 OUTCOMES = ["0", "1", "2", "3", "4", "6", "W"]
 RUNS_OF = np.array([0, 1, 2, 3, 4, 6, 0])
 N_OUT = 7
-ALL_FEATURES = ("lineup", "form", "venue", "type", "innings", "state", "extras", "impact", "league")
+ALL_FEATURES = ("lineup", "form", "venue", "type", "innings", "state", "extras", "impact", "league", "daynight")
 
 # How a "good day" shifts the 7 outcomes (log-odds per unit): fewer dots and wickets, more runs.
 # Used for match-to-match variation in a batter's form, a bowler's form, and pitch/conditions.
@@ -53,7 +53,7 @@ class RateModel:
     # strength of the pull toward "no effect", in balls
     PRIOR = {"batter": 120, "bat_phase": 90, "bat_type": 100, "bowler": 150, "bowl_phase": 120,
              "venue": 1500, "venue_type": 1500, "venue_inn": 1500, "innings": 50,
-             "newbat": 50, "pos": 50, "pressure": 100, "league": 300}
+             "newbat": 50, "pos": 50, "pressure": 100, "league": 300, "daynight": 500}
 
     def __init__(self, features=ALL_FEATURES, half_life_days: float | None = 730.0, rounds: int = 3,
                  sigmas: tuple[float, float, float] = (0.25, 0.15, 0.12), prior_scale: float = 1.0,
@@ -151,6 +151,8 @@ class RateModel:
             spec["venue"] = (vi, nven)
             if use_type:
                 spec["venue_type"] = (vi * 3 + bt, nven * 3)
+        if self.has("daynight") and "afternoon" in d.columns:
+            spec["daynight"] = (d["afternoon"].to_numpy().astype(int) * 2 + inn, 4)
         if self.has("league") and len(leagues) > 1:
             spec["league"] = (li, len(leagues))
         if self.has("innings"):
@@ -238,7 +240,7 @@ class RateModel:
         return self.types.get(name, UNKNOWN) if self.has("type") else UNKNOWN
 
     def base_probs(self, batter: str, bowler: str, phase: int, venue: str | None, innings: int,
-                   pos: int, league: str | None = None) -> np.ndarray:
+                   pos: int, league: str | None = None, afternoon: bool = False) -> np.ndarray:
         """Outcome chances before the in-match effects (new batter, game situation)."""
         bt = self.bowl_type(bowler)
         logp = np.log(self.league[phase, bt])
@@ -265,8 +267,33 @@ class RateModel:
                 logp = logp + np.log(T["venue_inn"][vi * 2 + innings - 1])
         if "pos" in T:
             logp = logp + np.log(T["pos"][min(pos, 10)])
+        if "daynight" in T:
+            logp = logp + np.log(T["daynight"][int(afternoon) * 2 + innings - 1])
         p = np.exp(logp - logp.max())
         return p / p.sum()
+
+    def recent_pitch(self, recent: pd.DataFrame, S: float = 1500.0) -> np.ndarray:
+        """Data version of a pitch report: how the ground has played in its last few matches compared with
+        what this model expects there. ``recent`` = ball rows (with feature columns) at this ground from
+        matches BEFORE the one being predicted. Returns 7 outcome ratios, shrunk toward 1 (S = prior balls)."""
+        d = recent[~(recent["wide"] | (recent["bye"] > 0) | (recent["legbye"] > 0))]
+        if d.empty:
+            return np.ones(N_OUT)
+        O = _outcome_index(d["runs_batter"].to_numpy(), d["bowler_wicket"].to_numpy())
+        nb_tab, pr_tab = self.dynamic_tables()
+        exp = np.zeros(N_OUT)
+        cache = {}
+        for r in d.itertuples(index=False):
+            key = (r.batter, r.bowler, r.phase, r.venue_key, r.innings, min(int(r.pos), 10), r.league, bool(getattr(r, "afternoon", False)))
+            p = cache.get(key)
+            if p is None:
+                p = cache[key] = self.base_probs(r.batter, r.bowler, r.phase, r.venue_key, r.innings, min(int(r.pos), 10),
+                                                 r.league, bool(getattr(r, "afternoon", False)))
+            q = p * nb_tab[r.nb_bucket] * pr_tab[r.pkey]
+            exp += q / q.sum()
+        obs = np.bincount(O, minlength=N_OUT).astype(float)
+        share = self.league[:, UNKNOWN].mean(axis=0)
+        return (obs + S * share) / (exp + S * share)
 
     def dynamic_tables(self) -> tuple[np.ndarray, np.ndarray]:
         """(new-batter ratios [4,7], game-situation ratios [N_PRESSURE,7]); ones if switched off."""
