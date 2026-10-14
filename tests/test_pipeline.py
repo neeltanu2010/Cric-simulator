@@ -1,84 +1,265 @@
+import json
+
 import numpy as np
 import pytest
 
+from cric_sim.actual import actual_stats, points_of
+from cric_sim.backtest import BTConfig, prepare, run_backtest, summarize
 from cric_sim.dream11 import T20_RULES, score
+from cric_sim.features import add_features
 from cric_sim.loader import load_matches
 from cric_sim.model import RateModel
 from cric_sim.optimizer import pick_team
-from cric_sim.simulator import Player, Team, simulate
-from tests.synth import make_dataset, team_names
+from cric_sim.players import PACE, SPIN
+from cric_sim.simulator import Impact, Player, Team, simulate
+from tests.conftest import TYPES
 
 ROLES = ["WK", "BAT", "BAT", "BAT", "AR", "AR", "BOWL", "BOWL", "BOWL", "BOWL", "BOWL"]
 
 
-@pytest.fixture(scope="module")
-def fitted(tmp_path_factory):
-    folder = tmp_path_factory.mktemp("data")
-    make_dataset(folder, n=60, power={"A1": 1.6})  # A1 is a big hitter
-    balls = load_matches(folder)
-    return balls, RateModel().fit(balls)
+def make_team(t, impact=None):
+    players = [Player(f"T{t}_P{k}", ROLES[k], 8.5, f"Team{t}") for k in range(11)]
+    return Team(f"Team{t}", players, players[5:11], impact)
 
 
-def make_team(prefix):
-    players = [Player(n, r, 8.5, prefix) for n, r in zip(team_names(prefix), ROLES)]
-    return Team(prefix, players, players[6:])
+# ---------------------------------------------------------------- data
+def test_loader_reads_toss_venue_and_impact(world):
+    m = world["matches"]
+    assert {"toss_winner", "toss_decision", "venue_key", "replacements", "players_a"} <= set(m.columns)
+    assert set(m["venue_key"]) == {"High Ground", "Spin Ground", "Chase Ground", "Plain Ground"}
+    assert (m["replacements"].map(len) > 0).any()
+    assert (m["players_a"].map(len) == 12).any()
 
 
-def test_loader_columns(fitted):
-    balls, _ = fitted
-    assert {"batter", "bowler", "phase", "runs_batter", "wicket"} <= set(balls.columns)
-    assert balls["phase"].isin([0, 1, 2]).all()
+def test_features_are_sane(world):
+    b = world["bf"]
+    assert b["pkey"].between(0, 23).all()
+    assert (b.loc[b.innings == 1, "target"].isna()).all()
+    assert b.loc[b.innings == 2, "target"].notna().all()
+    assert b["pos"].between(0, 10).all()
+    # openers are position 0 and 1
+    first = b.groupby(["match_id", "innings"]).head(1)
+    assert (first["pos"] == 0).all()
 
 
-def test_rates_sum_to_one_and_league_is_sane(fitted):
-    _, m = fitted
-    assert np.allclose(m.league.sum(axis=1), 1)
-    assert np.allclose(m.matchup("A1", "B8", 0).sum(), 1)
-    assert 0.02 < m.league[1][6] < 0.08  # wicket chance per ball
+# ---------------------------------------------------------------- model finds planted effects
+def test_ground_effects(world):
+    vs = world["model"].venue_stats
+    assert vs["High Ground"]["runs_per_over_vs_league"] > vs["Plain Ground"]["runs_per_over_vs_league"] + 0.4
+    assert vs["Spin Ground"]["runs_per_over_vs_league"] < vs["Plain Ground"]["runs_per_over_vs_league"]
 
 
-def test_big_hitter_is_rated_higher(fitted):
-    _, m = fitted
-    hard = lambda n: m.batter_rate(n, 1)[4] + m.batter_rate(n, 1)[5]
-    assert hard("A1") > hard("A2")
+def test_spinners_get_more_help_at_spin_ground(world):
+    m = world["model"]
+    v = m.ids["venue"]["Spin Ground"]
+    pace_w = m.tables["venue_type"][v * 3 + PACE][6]
+    spin_w = m.tables["venue_type"][v * 3 + SPIN][6]
+    assert spin_w > pace_w + 0.1
 
 
-def test_simulation_is_realistic_and_big_hitter_scores_more(fitted):
-    _, m = fitted
-    sim = simulate(m, make_team("A"), make_team("B"), n_sims=1500, seed=3)
-    assert 110 < sim["avg_score_a"] < 210
-    assert abs(sim["p_a_wins"] + sim["p_b_wins"] - 1) < 0.06  # only ties are missing
-    pts = sim["points"].mean(axis=0)
-    assert pts[0] > pts[1] + 3  # A1 vs A2, A1 should score clearly more
-    assert sim["points"].shape == (1500, 22)
+def test_chase_ground_is_easier_in_second_innings(world):
+    m = world["model"]
+    v = m.ids["venue"]["Chase Ground"]
+    t = m.tables["venue_inn"]
+    bound = lambda row: row[4] + row[5]
+    assert bound(t[v * 2 + 1]) > bound(t[v * 2]) + 0.05
+
+
+def test_batter_weak_against_spin_is_detected(world):
+    m = world["model"]
+    b = m.ids["bat"]["T0_P3"]
+    bound = lambda r: r[4] + r[5]
+    assert bound(m.tables["bat_type"][b * 3 + SPIN]) < 0.9 * bound(m.tables["bat_type"][b * 3 + PACE])
+
+
+def test_extras_and_run_outs_recovered(world):
+    m = world["model"]
+    assert m.p_wide.mean() == pytest.approx(0.035, abs=0.006)
+    assert m.p_noball.mean() == pytest.approx(0.006, abs=0.003)
+    assert m.p_bye.mean() == pytest.approx(0.02, abs=0.005)
+    assert m.p_runout.mean() == pytest.approx(0.005, abs=0.003)
+    assert m.kind_p[SPIN][2] > m.kind_p[PACE][2]  # spinners get the stumpings
+
+
+def test_chasing_pressure_raises_risk(world):
+    m = world["model"]
+    pr = m.tables["pressure"]
+    # chasing 13-16 an over (bucket 6) vs. 5-7 an over (bucket 2), no wickets down
+    bound = lambda row: row[4] + row[5]
+    assert bound(pr[6 * 3]) > bound(pr[2 * 3])
+
+
+def test_new_batters_are_more_vulnerable(world):
+    nb = world["model"].tables["newbat"]
+    assert nb[0][6] > nb[3][6]
+
+
+def test_switching_features_off_removes_them(world):
+    m = RateModel(features=()).fit(world["bf"], TYPES)
+    assert "venue" not in m.tables and "pressure" not in m.tables
+    assert m.extra_rates("T0_P6", 0) == (0.0, 0.0, 0.0)
+
+
+# ---------------------------------------------------------------- the points calculator
+def _z(v=0):
+    return np.array([[float(v)]])
+
+
+def _blank():
+    s = {k: _z() for k in ("runs", "balls", "fours", "sixes", "wkts", "bl_wkts", "dots", "maidens",
+                           "bowl_runs", "bowl_balls", "catches", "stumpings", "run_outs")}
+    s["out"] = np.array([[False]])
+    return s
 
 
 def test_scoring_rules_by_hand():
-    z = lambda v=0: np.array([[float(v)]])
-    stats = {k: z() for k in ("runs", "balls", "fours", "sixes", "wkts", "bl_wkts", "dots",
-                              "maidens", "bowl_runs", "bowl_balls", "catches", "stumpings", "run_outs")}
-    stats["out"] = np.array([[False]])
-    stats.update(runs=z(52), balls=z(30), fours=z(4), sixes=z(3))
-    pts = score(stats, ["BAT"])[0, 0]
-    # XI 4 + runs 52 + fours 16 + sixes 18 + half-century 8 + SR 173 -> +6
-    assert pts == 4 + 52 + 16 + 18 + 8 + 6
-    bowl = {k: z() for k in stats}
-    bowl["out"] = np.array([[False]])
-    bowl.update(wkts=z(3), bl_wkts=z(1), dots=z(10), bowl_runs=z(24), bowl_balls=z(24), maidens=z(0))
-    # XI 4 + 3 wkts 75 + bowled bonus 8 + 3-wkt bonus 4 + dots 10 + economy 6.0 -> +2
-    assert score(bowl, ["BOWL"])[0, 0] == 4 + 75 + 8 + 4 + 10 + 2
+    s = _blank()
+    s.update(runs=_z(52), balls=_z(30), fours=_z(4), sixes=_z(3))
+    # XI 4 + runs 52 + fours 16 + sixes 18 + half-century 8 + strike rate 173 -> +6
+    assert score(s, ["BAT"])[0, 0] == 4 + 52 + 16 + 18 + 8 + 6
+    b = _blank()
+    b.update(wkts=_z(3), bl_wkts=_z(1), dots=_z(10), bowl_runs=_z(24), bowl_balls=_z(24), maidens=_z(1))
+    # XI 4 + 3 wkts 75 + bowled bonus 8 + 3-wkt bonus 4 + dots 10 + maiden 12 + economy 6.0 -> +2
+    assert score(b, ["BOWL"])[0, 0] == 4 + 75 + 8 + 4 + 10 + 12 + 2
 
 
-def test_optimizer_respects_rules(fitted):
-    _, m = fitted
-    a, b = make_team("A"), make_team("B")
-    sim = simulate(m, a, b, n_sims=800, seed=5)
+def test_duck_and_exemptions_and_unplayed():
+    s = _blank()
+    s.update(out=np.array([[True]]), balls=_z(2))
+    assert score(s, ["BAT"])[0, 0] == 4 - 2
+    assert score(s, ["BOWL"])[0, 0] == 4  # bowlers are not penalised for ducks
+    s["played"] = np.array([[False]])
+    assert score(s, ["BAT"])[0, 0] == 0
+
+
+def test_actual_stats_on_a_tiny_hand_made_match(tmp_path):
+    def d(batter, bowler, ns, runs, extras=None, wicket=None, total=None):
+        x = {"batter": batter, "bowler": bowler, "non_striker": ns,
+             "runs": {"batter": runs, "extras": sum((extras or {}).values()),
+                      "total": total if total is not None else runs + sum((extras or {}).values())}}
+        if extras:
+            x["extras"] = extras
+        if wicket:
+            x["wickets"] = [wicket]
+        return x
+
+    over0 = [d("A", "B1", "C", 4), d("A", "B1", "C", 6),
+             d("A", "B1", "C", 0, wicket={"player_out": "A", "kind": "bowled"}),
+             d("C", "B1", "D", 0, wicket={"player_out": "C", "kind": "caught", "fielders": [{"name": "F1"}]}),
+             d("D", "B1", "E", 0, extras={"wides": 1}), d("D", "B1", "E", 1)]
+    over1 = [d("E", "B2", "D", 0) for _ in range(6)]
+    match = {"info": {"dates": ["2024-01-01"], "venue": "Test, City", "teams": ["X", "Y"],
+                      "players": {"X": ["A", "C", "D", "E"], "Y": ["B1", "B2", "F1"]},
+                      "toss": {"winner": "X", "decision": "bat"}, "outcome": {"winner": "X"}},
+             "innings": [{"team": "X", "overs": [{"over": 0, "deliveries": over0}, {"over": 1, "deliveries": over1}]},
+                         {"team": "Y", "overs": [{"over": 0, "deliveries": [d("B1", "A", "B2", 0)]}]}]}
+    (tmp_path / "1.json").write_text(json.dumps(match))
+    balls, matches = load_matches(tmp_path)
+    st = actual_stats(add_features(balls), matches).set_index("name")
+    a = st.loc["A"]
+    assert (a.runs, a.balls, a.fours, a.sixes, a.out) == (10, 3, 1, 1, True)
+    b1 = st.loc["B1"]
+    assert (b1.wkts, b1.bl_wkts, b1.dots, b1.bowl_balls, b1.bowl_runs) == (2, 1, 2, 5, 12)
+    b2 = st.loc["B2"]
+    assert (b2.maidens, b2.dots, b2.bowl_balls) == (1, 6, 6)
+    assert st.loc["F1"].catches == 1
+    assert st.loc["D"].balls == 1  # the wide is not a ball faced; the single is
+    pts = points_of(st.reset_index(), {})
+    assert np.isfinite(pts).all()
+
+
+# ---------------------------------------------------------------- simulator
+def test_simulation_is_realistic(world):
+    sim = simulate(world["model"], make_team(0), make_team(1), n_sims=1500, seed=3, venue="Plain Ground")
+    assert 120 < sim["avg_score_a"] < 230
+    assert abs(sim["p_a_wins"] + sim["p_b_wins"] - 1) < 0.06
+    assert sim["points"].shape == (1500, 22)
+    assert np.isfinite(sim["points"]).all()
+
+
+def test_high_scoring_ground_raises_scores(world):
+    m = world["model"]
+    hi = simulate(m, make_team(0), make_team(1), 1500, 1, "High Ground")
+    lo = simulate(m, make_team(0), make_team(1), 1500, 1, "Spin Ground")
+    assert hi["avg_score_a"] > lo["avg_score_a"] + 12
+
+
+def test_extras_change_the_game(world):
+    with_x = simulate(RateModel().fit(world["bf"], TYPES), make_team(0), make_team(1), 1500, 4, "Plain Ground")
+    no_x = simulate(RateModel(features=("venue", "type", "innings", "state", "impact")).fit(world["bf"], TYPES),
+                    make_team(0), make_team(1), 1500, 4, "Plain Ground")
+    # wides, no-balls and leg byes add runs but cost nothing in balls; byes and wides add to the total
+    assert with_x["avg_score_a"] != pytest.approx(no_x["avg_score_a"], abs=0.5)
+
+
+def test_impact_player_scores_only_when_used(world):
+    m = world["model"]
+    sub = Player("T0_P12", "BOWL", 7.0, "Team0")
+    never = make_team(0, Impact(sub, "bowl", "T0_P2", p_used=0.0))
+    always = make_team(0, Impact(sub, "bowl", "T0_P2", p_used=1.0))
+    s0 = simulate(m, never, make_team(1), 1000, 7, "Plain Ground")
+    s1 = simulate(m, always, make_team(1), 1000, 7, "Plain Ground")
+    i0 = [p.name for p in s0["players"]].index("T0_P12")
+    assert s0["points"][:, i0].max() == 0
+    assert s1["points"][:, i0].mean() > 20  # plays, bowls, gets playing-XI points
+    # the replaced batter has already batted: he keeps his batting points but no bowling points
+    j = [p.name for p in s1["players"]].index("T0_P2")
+    assert s1["points"][:, j].mean() > 4
+
+
+def test_batting_impact_sub_replaces_a_bowler_in_the_chase(world):
+    m = world["model"]
+    sub = Player("T1_P11", "BAT", 7.5, "Team1")
+    team_b = make_team(1, Impact(sub, "bat", "T1_P10", p_used=1.0))
+    s = simulate(m, make_team(0), team_b, 1000, 9, "Plain Ground")
+    names = [p.name for p in s["players"]]
+    assert s["points"][:, names.index("T1_P11")].mean() > 4  # bats in the chase
+    # the replaced bowler bowled in innings 1 (so has points) and does not bat
+    assert s["points"][:, names.index("T1_P10")].mean() > 4
+
+
+# ---------------------------------------------------------------- optimizer
+def test_optimizer_respects_rules(world):
+    sim = simulate(world["model"], make_team(0), make_team(1), 600, 5, "Plain Ground")
     best = pick_team(sim["players"], sim["points"])
     team = best["team"]
-    assert len(team) == 11
-    assert best["credits"] <= 100
-    assert max(sum(p.team == t for p in team) for t in "AB") <= 7
-    assert best["captain"] in team and best["vice_captain"] in team
-    assert best["captain"] is not best["vice_captain"]
+    assert len(team) == 11 and best["credits"] <= 100
+    assert max(sum(p.team == t for p in team) for t in ("Team0", "Team1")) <= 7
+    assert best["captain"] in team and best["vice_captain"] in team and best["captain"] is not best["vice_captain"]
     for role, (lo, hi) in {"WK": (1, 4), "BAT": (3, 6), "AR": (1, 4), "BOWL": (3, 6)}.items():
         assert lo <= sum(p.role == role for p in team) <= hi
+
+
+def test_optimizer_relaxes_when_roles_are_unusable():
+    players = [Player(f"p{i}", "BAT", 8.0, "A" if i < 11 else "B") for i in range(22)]
+    best = pick_team(players, np.random.default_rng(0).random((5, 22)))
+    assert len(best["team"]) == 11
+
+
+# ---------------------------------------------------------------- backtest
+def test_backtest_uses_only_the_past(world, monkeypatch):
+    seen = []
+    real_fit = RateModel.fit
+
+    def spy(self, balls, bowl_types=None):
+        seen.append(balls["date"].max())
+        return real_fit(self, balls, bowl_types)
+
+    monkeypatch.setattr(RateModel, "fit", spy)
+    bf, st = prepare(world["balls"], world["matches"])
+    cfg = BTConfig(n_test=5, sims=100, refit_every=1, types_override=TYPES, random_draws=2)
+    df = run_backtest(bf, world["matches"], st, cfg)
+    assert len(df) == len(seen) == 5
+    for fit_last_date, match_date in zip(seen, df["date"]):
+        assert fit_last_date < match_date  # never trained on the match day or later
+
+
+def test_backtest_beats_random_on_data_with_real_signal(world):
+    bf, st = prepare(world["balls"], world["matches"])
+    cfg = BTConfig(n_test=25, sims=500, refit_every=25, types_override=TYPES, random_draws=8)
+    s = summarize(run_backtest(bf, world["matches"], st, cfg))
+    assert s["matches"] >= 20
+    assert s["pts_model"] > s["pts_random"] + 50
+    assert s["pts_oracle"] > s["pts_model"]  # hindsight is always at least as good
+    assert s["spearman"] > 0.2
+    assert 0.6 < s["coverage_p10_p90"] < 0.95

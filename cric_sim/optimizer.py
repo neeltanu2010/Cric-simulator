@@ -13,13 +13,14 @@ ROLE_LIMITS = {"WK": (1, 4), "BAT": (3, 6), "AR": (1, 4), "BOWL": (3, 6)}
 
 
 def pick_team(players, points: np.ndarray, credit_cap: float = 100.0, max_per_team: int = 7,
-              risk: float = 0.0):
+              risk: float = 0.0, role_limits: dict | None = None):
     """Choose the best XI.
 
     ``points`` is (n_sims, n_players). ``risk`` sets what we maximise:
     0.0 = average points (safe, small leagues). Above 0 adds that many
     standard deviations, which favours high-ceiling players (big grand leagues).
     """
+    limits = ROLE_LIMITS if role_limits is None else role_limits
     n = len(players)
     mean = points.mean(axis=0)
     std = points.std(axis=0)
@@ -47,12 +48,16 @@ def pick_team(players, points: np.ndarray, credit_cap: float = 100.0, max_per_te
         add(np.concatenate([z, e, e]), 0, 1)
     for team in {p.team for p in players}:
         add(np.concatenate([[1.0 if p.team == team else 0.0 for p in players], z, z]), 0, max_per_team)
-    for role, (lo_r, hi_r) in ROLE_LIMITS.items():
+    for role, (lo_r, hi_r) in limits.items():
         add(np.concatenate([[1.0 if p.role == role else 0.0 for p in players], z, z]), lo_r, hi_r)
 
     res = milp(c=cost, constraints=LinearConstraint(np.array(rows), lo, hi),
                integrality=np.ones(3 * n), bounds=Bounds(0, 1))
     if not res.success:
+        if role_limits is None:
+            # role guesses can be wrong (for example no wicket-keeper found); relax the limits
+            return pick_team(players, points, credit_cap, max_per_team, risk,
+                             {r: (0, 11) for r in ROLE_LIMITS})
         raise RuntimeError(f"Could not build a valid team: {res.message}")
     x = np.round(res.x).astype(int)
     team = [i for i in range(n) if x[i]]

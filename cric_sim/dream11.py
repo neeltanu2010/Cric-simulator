@@ -43,6 +43,7 @@ def score(stats: dict[str, np.ndarray], roles: list[str], rules: dict = T20_RULE
     """
     r = rules
     runs, balls = stats["runs"], stats["balls"]
+    played = stats.get("played", np.ones(runs.shape, dtype=bool))
     pts = np.full(runs.shape, float(r["playing_xi"]))
 
     # batting
@@ -76,4 +77,4 @@ def score(stats: dict[str, np.ndarray], roles: list[str], rules: dict = T20_RULE
     c = stats["catches"]
     pts += c * r["catch"] + np.where(c >= 3, r["catches_3_bonus"], 0)
     pts += stats["stumpings"] * r["stumping"] + stats["run_outs"] * r["run_out"]
-    return pts
+    return np.where(played, pts, 0.0)
