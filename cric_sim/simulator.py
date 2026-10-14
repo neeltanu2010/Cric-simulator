@@ -175,7 +175,7 @@ def _lineups(team: Team, uses_impact: bool, batting_first: bool):
 def _innings(model: RateModel, venue: str | None, inn: int, bat: list, bowl: list, field: list,
              keeper: int, plan: np.ndarray, order: np.ndarray, n: int, rng: np.random.Generator, target,
              n_roster: tuple[int, int], league: str | None = None, cond: np.ndarray | None = None,
-             afternoon: bool = False, pitch_adj: np.ndarray | None = None):
+             afternoon: bool = False, pitch_adj: np.ndarray | None = None, pitch_report: dict | None = None):
     nb = len(bat)
     nbowl = len(bowl)
     bat_slot = np.array([s for s, _ in bat])
@@ -190,6 +190,9 @@ def _innings(model: RateModel, venue: str | None, inn: int, bat: list, bowl: lis
                 base[i, j, ph] = model.base_probs(b.name, w.name, ph, venue, inn, i, league, afternoon)
     if pitch_adj is not None:  # how the ground has been playing recently
         base = base * pitch_adj
+        base = base / base.sum(axis=-1, keepdims=True)
+    if pitch_report:  # what the pitch report says (your input)
+        base = base * pitch_report_ratios(model, bowl, pitch_report)[None, :, None, :]
         base = base / base.sum(axis=-1, keepdims=True)
     nb_tab, pr_tab = model.dynamic_tables()
     extras = np.array([[model.extra_rates(w.name, ph) for ph in range(3)] for _, w in bowl])  # [bowler][phase][3]
@@ -327,6 +330,51 @@ def _weights(team: Team, bowl: list) -> list[float] | None:
     return [w.get(p.name, typical) for _, p in bowl]
 
 
+PITCH_WORDS = {
+    "scoring": {"very high": 1.25, "high": 1.12, "normal": 1.0, "low": 0.9, "very low": 0.8},
+    "help": {"big": 1.3, "some": 1.12, "normal": 1.0, "little": 0.9, "none": 0.85},
+}
+
+
+def _pitch_value(v, kind: str) -> float:
+    if v is None:
+        return 1.0
+    if isinstance(v, (int, float)):
+        return float(v)
+    try:
+        return float(v)
+    except ValueError:
+        pass
+    words = PITCH_WORDS["scoring" if kind == "scoring" else "help"]
+    key = str(v).strip().lower().replace(" help", "")
+    if key not in words:
+        raise ValueError(f"pitch {kind}: use a number or one of {list(words)}")
+    return words[key]
+
+
+def pitch_report_ratios(model: RateModel, bowl: list, report: dict | None) -> np.ndarray:
+    """Turn a pitch report you read or heard into outcome ratios per bowler, shape (n_bowlers, 7).
+    report = {"scoring": "high" | 1.12, "spin": "some" | 1.12, "pace": "normal" | 1.0}
+    scoring scales the odds of fours and sixes; spin / pace scale that bowler type's wicket odds (and
+    lower its boundaries a little). This is YOUR judgement entering the model: it could not be tested
+    on past matches, because no archive of pitch reports is available."""
+    from .players import PACE, SPIN
+    r = np.ones((len(bowl), 7))
+    if not report:
+        return r
+    sc = _pitch_value(report.get("scoring"), "scoring")
+    sp, pc = _pitch_value(report.get("spin"), "spin"), _pitch_value(report.get("pace"), "pace")
+    r[:, 4] *= sc
+    r[:, 5] *= sc
+    r[:, 1:4] *= sc ** 0.3
+    for j, (_, w) in enumerate(bowl):
+        t = model.bowl_type(w.name)
+        h = sp if t == SPIN else pc if t == PACE else (sp * pc) ** 0.5
+        r[j, 6] *= h
+        r[j, 4:6] /= h ** 0.5
+    return r
+
+
 def _keeper(team: Team) -> int:
     return next((i for i, p in enumerate(team.batting_order) if p.role == "WK"), 0)
 
@@ -370,7 +418,7 @@ def calibrate_swings(model: RateModel, n: int = 1500) -> float:
 
 def simulate(model: RateModel, team_a: Team, team_b: Team, n_sims: int = 5000, seed: int = 0,
              venue: str | None = None, rules: dict = T20_RULES, league: str | None = None,
-             afternoon: bool = False, pitch_adj: np.ndarray | None = None) -> dict:
+             afternoon: bool = False, pitch_adj: np.ndarray | None = None, pitch_report: dict | None = None) -> dict:
     """Simulate with team A batting first. Returns points for every player and win chances."""
     if model.mean_preserving and model.has("form") and model._calibrated_for != (tuple(model.sigmas), tuple(sorted(model.features))):
         calibrate_swings(model)
@@ -398,13 +446,13 @@ def simulate(model: RateModel, team_a: Team, team_b: Team, n_sims: int = 5000, s
                   else _plans(b_bowl, _weights(team_b, b_bowl), team_b.bowl_plan, cnt, rng, rl))
         ord_a = _emp_order(a_bat, team_a.pos_hist, cnt, rng) if rl and team_a.pos_hist else _order(len(a_bat), cnt, rng, rl)
         bs1, bo1, sc1, _ = _innings(model, venue, 1, a_bat, b_bowl, b_field, _keeper(team_b), plan_b,
-                                    ord_a, cnt, rng, None, (ra, rb), league, cond, afternoon, pitch_adj)
+                                    ord_a, cnt, rng, None, (ra, rb), league, cond, afternoon, pitch_adj, pitch_report)
         # innings 2: B chases (maybe with its impact batter), A bowls (maybe with its impact bowler)
         plan_a = (_phase_plans(a_bowl, team_a.phase_overs, cnt, rng) if rl and team_a.phase_overs and not team_a.bowl_plan
                   else _plans(a_bowl, _weights(team_a, a_bowl), team_a.bowl_plan, cnt, rng, rl))
         ord_b = _emp_order(b_bat, team_b.pos_hist, cnt, rng) if rl and team_b.pos_hist else _order(len(b_bat), cnt, rng, rl)
         bs2, bo2, sc2, _ = _innings(model, venue, 2, b_bat, a_bowl, a_field, _keeper(team_a), plan_a,
-                                    ord_b, cnt, rng, sc1 + 1, (rb, ra), league, cond, afternoon, pitch_adj)
+                                    ord_b, cnt, rng, sc1 + 1, (rb, ra), league, cond, afternoon, pitch_adj, pitch_report)
         played_a = np.ones((cnt, ra), dtype=bool)
         played_b = np.ones((cnt, rb), dtype=bool)
         if team_a.impact:

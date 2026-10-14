@@ -1,0 +1,150 @@
+{
+ "venue": "Narendra Modi Stadium",
+ "team_a": {
+  "name": "Gujarat Titans",
+  "players": [
+   {
+    "name": "B Sai Sudharsan",
+    "role": "BAT",
+    "credits": 8.5,
+    "bowls": false
+   },
+   {
+    "name": "Shubman Gill",
+    "role": "BAT",
+    "credits": 8.5,
+    "bowls": false
+   },
+   {
+    "name": "JC Buttler",
+    "role": "BAT",
+    "credits": 8.5,
+    "bowls": false
+   },
+   {
+    "name": "Washington Sundar",
+    "role": "BAT",
+    "credits": 8.5,
+    "bowls": true
+   },
+   {
+    "name": "R Tewatia",
+    "role": "BAT",
+    "credits": 8.5,
+    "bowls": false
+   },
+   {
+    "name": "JO Holder",
+    "role": "BOWL",
+    "credits": 8.5,
+    "bowls": true
+   },
+   {
+    "name": "Arshad Khan",
+    "role": "BOWL",
+    "credits": 8.5,
+    "bowls": true
+   },
+   {
+    "name": "Rashid Khan",
+    "role": "BOWL",
+    "credits": 8.5,
+    "bowls": true
+   },
+   {
+    "name": "K Rabada",
+    "role": "BOWL",
+    "credits": 8.5,
+    "bowls": true
+   },
+   {
+    "name": "Mohammed Siraj",
+    "role": "BOWL",
+    "credits": 8.5,
+    "bowls": true
+   },
+   {
+    "name": "M Prasidh Krishna",
+    "role": "BOWL",
+    "credits": 8.5,
+    "bowls": true
+   }
+  ]
+ },
+ "team_b": {
+  "name": "Royal Challengers Bengaluru",
+  "players": [
+   {
+    "name": "V Kohli",
+    "role": "BAT",
+    "credits": 8.5,
+    "bowls": false
+   },
+   {
+    "name": "D Padikkal",
+    "role": "BAT",
+    "credits": 8.5,
+    "bowls": false
+   },
+   {
+    "name": "RM Patidar",
+    "role": "BAT",
+    "credits": 8.5,
+    "bowls": false
+   },
+   {
+    "name": "VR Iyer",
+    "role": "BAT",
+    "credits": 8.5,
+    "bowls": false
+   },
+   {
+    "name": "JM Sharma",
+    "role": "BAT",
+    "credits": 8.5,
+    "bowls": false
+   },
+   {
+    "name": "TH David",
+    "role": "BAT",
+    "credits": 8.5,
+    "bowls": false
+   },
+   {
+    "name": "KH Pandya",
+    "role": "AR",
+    "credits": 8.5,
+    "bowls": true
+   },
+   {
+    "name": "R Shepherd",
+    "role": "BAT",
+    "credits": 8.5,
+    "bowls": true
+   },
+   {
+    "name": "Rasikh Salam",
+    "role": "BOWL",
+    "credits": 8.5,
+    "bowls": true
+   },
+   {
+    "name": "B Kumar",
+    "role": "BOWL",
+    "credits": 8.5,
+    "bowls": true
+   },
+   {
+    "name": "JR Hazlewood",
+    "role": "BOWL",
+    "credits": 8.5,
+    "bowls": true
+   }
+  ]
+ },
+ "pitch": {
+  "scoring": "high",
+  "spin": "some",
+  "pace": "normal"
+ }
+}

@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 from .backtest import (BTConfig, STAGES, format_ablation, format_report, prepare, run_ablation,
                        run_backtest, summarize)
@@ -64,7 +65,23 @@ def cmd_predict(a):
         print(f"\nGround: {venue}  ({vs['balls']} balls of data)  runs/over vs league {vs['runs_per_over_vs_league']:+.2f}, "
               f"wicket rate x{vs['wicket_rate_ratio']:.2f}, chasing side won {chase:.0%} of {len(m)} matches")
 
-    sim = simulate(model, team_a, team_b, a.sims, a.seed, venue, league=a.league)
+    sq = json.loads(Path(a.squad).read_text())
+    pitch = dict(sq.get("pitch") or {})
+    for k in ("scoring", "spin", "pace"):
+        v = getattr(a, f"pitch_{k}")
+        if v is not None:
+            pitch[k] = float(v) if v.replace(".", "", 1).isdigit() else v
+    if any(str(v) not in ("normal", "1", "1.0") for v in pitch.values()):
+        print("Pitch report used:", ", ".join(f"{k} = {v}" for k, v in pitch.items()))
+    adj = None
+    if a.recent_pitch and venue:
+        rec = bf[(bf["venue_key"] == venue) & (bf["date"] >= bf["date"].max() - pd.Timedelta(days=60))]
+        if len(rec):
+            adj = model.recent_pitch(rec)
+            print(f"Recent pitch ({rec['match_id'].nunique()} matches here in the last 60 days of data): "
+                  f"fours x{adj[4]:.2f}, sixes x{adj[5]:.2f}, wickets x{adj[6]:.2f}")
+    sim = simulate(model, team_a, team_b, a.sims, a.seed, venue, league=a.league, afternoon=a.afternoon,
+                   pitch_adj=adj, pitch_report=pitch or None)
     print(f"\n{team_a.name} (bats first) avg {sim['avg_score_a']:.0f}  win {sim['p_a_wins']:.0%}   |   "
           f"{team_b.name} avg {sim['avg_score_b']:.0f}  win {sim['p_b_wins']:.0%}\n")
     players, pts = sim["players"], sim["points"]
@@ -108,6 +125,20 @@ def cmd_backtest(a):
     print(f"\nSaved to {out}/ ({time.time() - t:.0f}s)")
 
 
+def cmd_squad(a):
+    from .build_squad import build_squad, write_squad
+    _, matches, bf, st = _load(a)
+    split = lambda x: [p for p in (x or "").split(",") if p.strip()]
+    nums = lambda x: [float(v) for v in split(x)] or None
+    squad, notes = build_squad(st, matches, a.team_a, split(a.xi_a), a.team_b, split(a.xi_b), a.venue, a.sub_a, a.sub_b,
+                               nums(a.credits_a), nums(a.credits_b),
+                               {"scoring": a.pitch_scoring, "spin": a.pitch_spin, "pace": a.pitch_pace})
+    print("\n".join(notes))
+    write_squad(squad, a.out)
+    print(f"\nWrote {a.out} (team A = {squad['team_a']['name']} bats first). Check the matches above, then run:\n"
+          f"  python -m cric_sim.cli predict {a.out}")
+
+
 def cmd_types(a):
     balls, _ = load_many(a.data or ["data/ipl_json"])
     n = write_template(balls, a.out)
@@ -127,7 +158,8 @@ def cmd_venues(a):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name, fn in (("predict", cmd_predict), ("backtest", cmd_backtest), ("types", cmd_types), ("venues", cmd_venues)):
+    for name, fn in (("predict", cmd_predict), ("backtest", cmd_backtest), ("types", cmd_types), ("venues", cmd_venues),
+                     ("squad", cmd_squad)):
         sp = sub.add_parser(name)
         sp.add_argument("--data", nargs="+", default=None,
                         help="one or more folders of Cricsheet JSON matches (all are used for training); "
@@ -140,6 +172,11 @@ def main(argv=None):
             sp.add_argument("--venue", default=None)
             sp.add_argument("--league", default="ipl", help="which league's scoring level to use")
             sp.add_argument("--config", default="configs/best.json", help="setting chosen by the experiments")
+            sp.add_argument("--pitch-scoring", default=None, help="pitch report: very high / high / normal / low / very low, or a number")
+            sp.add_argument("--pitch-spin", default=None, help="help for spinners: big / some / normal / little / none, or a number")
+            sp.add_argument("--pitch-pace", default=None, help="help for pace bowlers: big / some / normal / little / none, or a number")
+            sp.add_argument("--recent-pitch", action="store_true", help="adjust for how this ground played in its last 60 days")
+            sp.add_argument("--afternoon", action="store_true", help="afternoon game (no evening dew); needs the daynight effect")
             sp.add_argument("--sims", type=int, default=5000)
             sp.add_argument("--risk", type=float, default=0.0, help="0 = safe, 1 = chase upside")
         if name == "backtest":
@@ -150,6 +187,20 @@ def main(argv=None):
             sp.add_argument("--ablate", action="store_true", help="add features one at a time")
             sp.add_argument("--test-league", default=None, help="only test matches from this league, e.g. ipl")
             sp.add_argument("--out", default="reports")
+        if name == "squad":
+            sp.add_argument("--team-a", required=True, help="team batting first, e.g. RCB or 'Royal Challengers'")
+            sp.add_argument("--xi-a", required=True, help="the announced XI, comma separated, as written in the app")
+            sp.add_argument("--team-b", required=True, help="team batting second")
+            sp.add_argument("--xi-b", required=True)
+            sp.add_argument("--venue", default=None)
+            sp.add_argument("--sub-a", default=None, help="likely impact sub of team A (optional)")
+            sp.add_argument("--sub-b", default=None)
+            sp.add_argument("--credits-a", default=None, help="Dream11 credits in the same order as --xi-a, comma separated")
+            sp.add_argument("--credits-b", default=None)
+            sp.add_argument("--pitch-scoring", default="normal")
+            sp.add_argument("--pitch-spin", default="normal")
+            sp.add_argument("--pitch-pace", default="normal")
+            sp.add_argument("--out", default="squads/match.json")
         if name == "types":
             sp.add_argument("--out", default="data/players.csv")
     a = ap.parse_args(argv)

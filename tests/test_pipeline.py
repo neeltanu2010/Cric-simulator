@@ -384,3 +384,31 @@ def test_backtest_with_real_subs_and_recent_pitch(world):
                    recent_pitch=True, empirical_lineup=True, features=("lineup", "venue", "type", "innings", "impact", "daynight"))
     df = run_backtest(bf, world["matches"], st, cfg)
     assert len(df) == 4 and df["pts_model"].notna().all()
+
+
+def test_squad_builder_matches_app_style_names(world):
+    from cric_sim.build_squad import build_squad, match_player, match_team
+    names = ["V Kohli", "RG Sharma", "B Sai Sudharsan", "JJ Bumrah", "Mohammed Siraj"]
+    assert match_player("Virat Kohli", names, names)[0] == "V Kohli"
+    assert match_player("Rohit Sharma", names, names)[0] == "RG Sharma"
+    assert match_player("Sai Sudharsan", names, names)[0] == "B Sai Sudharsan"
+    assert match_player("Mohd Siraj", names, names)[0] == "Mohammed Siraj"
+    assert match_team("RCB", ["Royal Challengers Bangalore", "Royal Challengers Bengaluru"]) == "Royal Challengers Bengaluru"
+    bf, st = prepare(world["balls"], world["matches"])
+    xi = lambda t: [f"T{t}_P{k}" for k in range(11)]
+    squad, notes = build_squad(st, world["matches"], "Team0", xi(0), "Team1", xi(1), "High Grnd", sub_b="T1_P12")
+    assert squad["venue"] == "High Ground"
+    assert [p["name"] for p in squad["team_a"]["players"]][0] in xi(0)
+    assert sum(p["bowls"] for p in squad["team_a"]["players"]) >= 5
+    assert squad["team_b"]["impact"]["name"] == "T1_P12" and squad["team_b"]["impact"]["replaces"] in xi(1)
+
+
+def test_typed_pitch_report_moves_the_game(world):
+    m = world["model"]
+    flat = simulate(m, make_team(0), make_team(1), 1500, 2, "Plain Ground")
+    high = simulate(m, make_team(0), make_team(1), 1500, 2, "Plain Ground", pitch_report={"scoring": "high"})
+    spin = simulate(m, make_team(0), make_team(1), 1500, 2, "Plain Ground", pitch_report={"spin": "big"})
+    assert high["avg_score_a"] > flat["avg_score_a"] + 4
+    assert spin["avg_score_a"] < flat["avg_score_a"]
+    with pytest.raises(ValueError):
+        simulate(m, make_team(0), make_team(1), 10, 2, "Plain Ground", pitch_report={"scoring": "huge"})
