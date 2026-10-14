@@ -72,6 +72,32 @@ New validation window: IPL 2022-24 (219 matches). 2025-26 stayed held out and wa
 
 **Conclusion: the model sits at about 66-67% of the best possible, a steady +40 points over a simple form rule on 2025-26 and about +20-25 on 2022-24. It did not reach "good" (68%+).** Every method tried, including machine-learned corrections, tops out at a rank correlation of about 0.22-0.24 with real points. That looks like the limit of what ball-by-ball history can predict about one match's fantasy points. Bigger gains would need information this data does not have: confirmed batting orders and bowling plans, pitch reports, weather and dew, injuries, and real Dream11 credits.
 
+## Confirmed lineups and pitch reports
+**What could be obtained.** Searches found no public archive of past pitch reports (they exist only as text on ESPNcricinfo / Cricbuzz pages, which are blocked from this environment and whose terms forbid bulk scraping) and no IPL weather/dew dataset. Historical weather is available free from Open-Meteo, but `archive-api.open-meteo.com` is blocked by this environment's network policy; it can be added under Allowed domains in the environment settings.
+
+**What was found in our own data:** Cricsheet records every impact-player substitution on the delivery where it happened (557 subs, all 291 IPL matches with 12 listed players, 2023-26). The loader now reads them, so the backtest uses the exact starting XI (announced at the toss) and the real sub. Who the sub replaced is still guessed, because that is decided during the match.
+
+**Data stand-ins for conditions:** afternoon vs evening game (IPL double-headers, from the fixture list; dew is an evening effect) and a "recent pitch" adjustment (how the ground played in the last 60 days vs the model's expectation).
+
+| Change (IPL 2022-24 validation, 50/50 mix) | XI points vs real XI/subs | Kept? |
+|---|---|---|
+| Real XI and subs instead of guessing | +0.3 (no change); rank corr 0.223 -> 0.230 | Yes (correct data) |
+| + afternoon/evening effect | +1.5 (-2.5 to +5.5) | Off by default (`daynight` effect) |
+| + recent pitch | +0.4 (-5.1 to +5.7), first-innings bias worse | Off by default (`--recent-pitch`) |
+| + both | -2.3 (-8.3 to +4.0) | No |
+
+A ground's recent scoring surprise barely predicts its next match (correlation +0.04 to +0.11), so data-made "pitch reports" carry little information. **Held-out IPL 2025-26 with confirmed lineups:** 755.9 points (66.1% of best possible), +39 over the form rule; vs the guessed-sub version: -1.4 (95% range -11 to +8), i.e. no measurable change.
+
+**Using them for a real match (after the toss):**
+```
+# paste the announced XIs as written in the app; team A bats first; add the likely impact subs and real credits
+python -m cric_sim.cli squad --team-a GT --xi-a "Shubman Gill, Sai Sudharsan, ..." --team-b RCB --xi-b "Virat Kohli, ..." \
+    --venue "Narendra Modi Stadium" --sub-b "Rasikh Salam" --credits-a "10,9,..." --credits-b "..." \
+    --pitch-scoring high --pitch-spin some --out squads/today.json
+python -m cric_sim.cli predict squads/today.json            # add --recent-pitch to also use the last 60 days at the ground
+```
+The pitch report you type (`--pitch-scoring very high/high/normal/low/very low`, `--pitch-spin` / `--pitch-pace big/some/normal/little/none`, or numbers) moves the simulation, e.g. "high" scoring raised a first-innings estimate from 202 to 211. **This input is your judgement and could not be tested on past matches**, because no archive of pitch reports exists.
+
 ## How the backtest stays honest
 - For each test match, the model is trained **only on matches before that date** (a test checks this).
 - Batting order, bowlers, roles and credits are worked out from past matches only.
