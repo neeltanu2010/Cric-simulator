@@ -86,3 +86,24 @@ def pick_bowlers(names: list[str], hist: dict[str, dict], roles: dict[str, str],
         if n not in chosen:
             chosen.append(n)
     return chosen
+
+
+def phase_overs_table(balls_f: pd.DataFrame) -> pd.DataFrame:
+    """Overs bowled per match per bowler in powerplay / middle / death (columns 0, 1, 2)."""
+    lg = balls_f[~(balls_f["wide"] | balls_f["noball"])]
+    t = lg.groupby(["match_id", "bowler", "phase"]).size().unstack(fill_value=0).reindex(columns=[0, 1, 2], fill_value=0) / 6.0
+    return t.reset_index().rename(columns={"bowler": "name"})
+
+
+def lineup_history(stats: pd.DataFrame, bph: pd.DataFrame, names: list[str], n_pos: int = 10, n_overs: int = 15):
+    """Recent real batting positions and usual overs per phase, for the realistic-lineup simulator.
+    ``stats`` must only hold matches before the one being predicted."""
+    ps = stats[stats["name"].isin(names)].sort_values("date")
+    pos_hist = {n: g["pos"].dropna().tail(n_pos).tolist() for n, g in ps.groupby("name")}
+    phase_ov = {}
+    for n, g in ps.groupby("name"):
+        mids = g["match_id"].tail(n_overs)
+        b = bph[(bph["name"] == n) & bph["match_id"].isin(mids)]
+        if len(mids):
+            phase_ov[n] = tuple(b[[0, 1, 2]].sum().to_numpy() / len(mids))
+    return pos_hist, phase_ov

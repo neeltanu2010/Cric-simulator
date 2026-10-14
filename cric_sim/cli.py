@@ -46,6 +46,11 @@ def cmd_predict(a):
     print(f"Setting: {a.config if cfg else 'defaults'}  (simulator share {share:.0%} of the team pick)")
     model = RateModel(**kw).fit(bf, bowl_types(bf, a.types_csv))
     team_a, team_b, venue = load_squads(a.squad)
+    if cfg.get("empirical_lineup"):
+        from .lineup import lineup_history, phase_overs_table
+        bph = phase_overs_table(bf)
+        for t in (team_a, team_b):
+            t.pos_hist, t.phase_overs = lineup_history(st, bph, [p.name for p in t.roster])
     venue = a.venue or venue
     unknown = [p.name for t in (team_a, team_b) for p in t.roster if not model.known(p.name)]
     if unknown:
@@ -72,7 +77,7 @@ def cmd_predict(a):
     if share < 1.0:  # mix the simulator with each player's recent form, as chosen in the experiments
         from .lineup import form_points, history_table, infer_roles
         roles = infer_roles(history_table(st))
-        form, role_mean, glob = form_points(st, roles)
+        form, role_mean, glob = form_points(st, roles, decay=cfg.get("mix_form_decay", 0.9))
         fv = np.array([form.get(p.name, role_mean.get(p.role, glob)) for p in players])
         values = share * pts.mean(axis=0)[None, :] + (1 - share) * fv[None, :]
         print(f"\nValue used to pick the team = {share:.0%} simulator + {1 - share:.0%} recent form")

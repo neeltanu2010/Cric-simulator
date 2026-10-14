@@ -28,8 +28,8 @@ from scipy.stats import spearmanr
 
 from .actual import actual_stats, points_of, points_parts
 from .features import add_features
-from .lineup import (estimate_credits, form_points, history_table, infer_roles, order_by_position,
-                     pick_bowlers)
+from .lineup import (estimate_credits, form_points, history_table, infer_roles, lineup_history,
+                     order_by_position, phase_overs_table, pick_bowlers)
 from .model import ALL_FEATURES, RateModel
 from .optimizer import pick_team
 from .players import bowl_types, load_player_csv
@@ -70,6 +70,8 @@ class BTConfig:
     prior_scale: float = 1.0
     mean_preserving: bool = False  # cancel the score drift caused by day-to-day swings
     empirical_lineup: bool = False  # draw batting positions and bowling overs from each player's real history
+    mix_form_decay: float = 0.9  # decay of the form estimate used INSIDE the simulator/form mix (the reported
+    # "form baseline" always uses the fixed 0.9 rule so results stay comparable)
 
 
 def _team_xi(names, sub, hist):
@@ -117,9 +119,7 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
     inn_tot = inn_tot.join(ms.set_index("match_id")[["venue_key", "date"]])
 
     if cfg.empirical_lineup:
-        lg = balls_f[~(balls_f["wide"] | balls_f["noball"])]
-        bph = lg.groupby(["match_id", "bowler", "phase"]).size().unstack(fill_value=0).reindex(columns=[0, 1, 2], fill_value=0) / 6.0
-        bph = bph.reset_index().rename(columns={"bowler": "name"})
+        bph = phase_overs_table(balls_f)
     rows, model, model_n = [], None, 10 ** 9
     by_match: dict = {}
     t0 = time.time()
@@ -147,6 +147,7 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
         hist = history_table(past_s)
         roles = infer_roles(hist, csv_over)
         form, role_mean, glob = form_points(past_s, roles)
+        mix_form = form if cfg.mix_form_decay == 0.9 else form_points(past_s, roles, decay=cfg.mix_form_decay)[0]
 
         teams = []
         ok = True
@@ -208,16 +209,7 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
                                 "bowl" if team_name == r.team_a else "bat", imp[1], 1.0)
             pos_hist = phase_ov = None
             if cfg.empirical_lineup:
-                pool_names = order + ([imp[0]] if imp else [])
-                ps = past_s[past_s["name"].isin(pool_names)].sort_values("date")
-                pos_hist = {n: g["pos"].dropna().tail(10).tolist() for n, g in ps.groupby("name")}
-                # usual overs per phase over each bowler's last 15 matches (0 in matches where he did not bowl)
-                phase_ov = {}
-                for n, g in ps.groupby("name"):
-                    mids = g["match_id"].tail(15)
-                    b = bph[(bph["name"] == n) & bph["match_id"].isin(mids)]
-                    if len(mids):
-                        phase_ov[n] = tuple(b[[0, 1, 2]].sum().to_numpy() / len(mids))
+                pos_hist, phase_ov = lineup_history(past_s, bph, order + ([imp[0]] if imp else []))
             built.append(Team(team_name, [players[n] for n in order], [players[n] for n in bowl_names], impact,
                               bowl_weights=bowl_w, pos_hist=pos_hist, phase_overs=phase_ov))
         ta, tb = built
@@ -272,7 +264,8 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
         best = pick_team(plist, sim["points"])
         form_pick = pick_team(plist, form_vec[None, :])
         oracle = pick_team(plist, actual[None, :])
-        blends = {f"pts_blend{int(a * 100)}": _score_xi(pick_team(plist, (a * mean + (1 - a) * form_vec)[None, :]), idx_of, actual)
+        mix_vec = np.array([mix_form.get(n, role_mean.get(roles.get(n, "BAT"), glob)) for n in names])
+        blends = {f"pts_blend{int(a * 100)}": _score_xi(pick_team(plist, (a * mean + (1 - a) * mix_vec)[None, :]), idx_of, actual)
                   for a in BLENDS}
         sp_blend = spearmanr((0.5 * mean + 0.5 * form_vec)[played], actual[played])[0] if played.sum() > 3 else np.nan
         rand = np.mean([_score_xi(pick_team(plist, rng.random((1, len(plist)))), idx_of, actual)

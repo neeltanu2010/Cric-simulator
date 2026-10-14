@@ -58,6 +58,20 @@ What the experiments showed:
 - Win prediction has **no skill** (52% accuracy, no better than the historical rate). Do not use it for betting.
 - Fantasy points are noisy, and a 7% edge over a simple rule does not mean you will win contests against smart players. Entry fees take a cut.
 
+## Push for "good" (68%+ of the best possible): what was tried
+New validation window: IPL 2022-24 (219 matches). 2025-26 stayed held out and was tested once at the end.
+
+| Idea | Result on 2022-24 validation | Kept? |
+|---|---|---|
+| Learned correction layer (ridge / boosted trees on simulator outputs + form + history) | Ridge +0.8 pts over the 50/50 mix, boosted trees -21. No real gain. | No |
+| Realistic lineups (batting positions and phase-by-phase bowling drawn from real history) | Rank corr 0.194 -> 0.223, XI +7 (sim alone), +4 (mix). Consistent but small. | Yes |
+| Slower-fading form inside the mix (decay 0.95 instead of 0.9) | Mix XI 730 -> 736 | Yes |
+| Cancel day-to-day-swing score drift | Worse on both periods | No |
+
+**Held-out IPL 2025-26 (148 matches), improved setting:** 50/50 mix 757.3 points (66.3% of best possible), simulator alone 760.9, form rule 717.1. The previous version scored 760.7 on the same matches: the difference is -3.4 (95% range -16 to +9), i.e. **no measurable change**. Rank correlation rose slightly (0.231 -> 0.235).
+
+**Conclusion: the model sits at about 66-67% of the best possible, a steady +40 points over a simple form rule on 2025-26 and about +20-25 on 2022-24. It did not reach "good" (68%+).** Every method tried, including machine-learned corrections, tops out at a rank correlation of about 0.22-0.24 with real points. That looks like the limit of what ball-by-ball history can predict about one match's fantasy points. Bigger gains would need information this data does not have: confirmed batting orders and bowling plans, pitch reports, weather and dew, injuries, and real Dream11 credits.
+
 ## How the backtest stays honest
 - For each test match, the model is trained **only on matches before that date** (a test checks this).
 - Batting order, bowlers, roles and credits are worked out from past matches only.

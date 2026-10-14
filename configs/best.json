@@ -19,8 +19,14 @@
  "prior_scale": 4.0,
  "pool": "leagues",
  "simulator_share": 0.5,
- "chosen_on": "IPL 2023-24 validation",
- "validation_xi_points": 740.1103448275862,
- "test_xi_points": 760.6621621621622,
- "test_form_points": 717.0641891891892
+ "chosen_on": "IPL 2022-24 validation (219 matches); earlier version chosen on 2023-24",
+ "validation_xi_points": 735.6,
+ "empirical_lineup": true,
+ "mix_form_decay": 0.95,
+ "previous_version": {
+  "validation_xi_points": 740.1103448275862,
+  "test_xi_points": 760.6621621621622,
+  "test_form_points": 717.0641891891892,
+  "note": "all effects, 50% mix, form decay 0.9, generic lineup noise"
+ }
 }
