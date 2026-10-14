@@ -89,3 +89,17 @@ def points_of(stats: pd.DataFrame, roles: dict[str, str], rules: dict = T20_RULE
         sub = {k: v[m] for k, v in arr.items()}
         out[m] = score(sub, [role], rules)[:, 0]
     return out
+
+
+def points_parts(stats: pd.DataFrame, roles: dict[str, str], rules: dict = T20_RULES) -> pd.DataFrame:
+    """Real Dream11 points split into base / bat / bowl / field for every row of ``stats``."""
+    arr = {c: stats[c].to_numpy(dtype=float)[:, None] for c in STAT_COLS if c != "out"}
+    arr["out"] = stats["out"].to_numpy()[:, None]
+    r = np.array([roles.get(n, "BAT") for n in stats["name"]])
+    out = {k: np.zeros(len(stats)) for k in ("base", "bat", "bowl", "field")}
+    for role in set(r):
+        m = r == role
+        _, parts = score({k: v[m] for k, v in arr.items()}, [role], rules, parts=True)
+        for k in out:
+            out[k][m] = parts[k][:, 0]
+    return pd.DataFrame(out, index=stats.index)

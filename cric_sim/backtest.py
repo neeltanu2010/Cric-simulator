@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
 
-from .actual import actual_stats, points_of
+from .actual import actual_stats, points_of, points_parts
 from .features import add_features
 from .lineup import (estimate_credits, form_points, history_table, infer_roles, order_by_position,
                      pick_bowlers)
@@ -64,6 +64,7 @@ class BTConfig:
     label: str = "full"
     test_league: str | None = None  # only test matches from this league (training uses all)
     test_before: str | None = None  # only test matches before this date (for tuning on older seasons)
+    test_from: str | None = None  # only test matches on or after this date
     sigmas: tuple = (0.25, 0.15, 0.12)  # day-to-day variation in batter form, bowler form, conditions
     half_life_days: float = 730.0
     prior_scale: float = 1.0
@@ -107,6 +108,8 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
         pool = pool[pool["league"] == cfg.test_league]
     if cfg.test_before:
         pool = pool[pool["date"] < pd.Timestamp(cfg.test_before)]
+    if cfg.test_from:
+        pool = pool[pool["date"] >= pd.Timestamp(cfg.test_from)]
     test = pool.tail(cfg.n_test)
     csv_over = load_player_csv(cfg.types_csv)
     inn_tot = balls_f.groupby(["match_id", "innings"])["runs_total"].sum().unstack()
@@ -220,15 +223,34 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
         sp_form = spearmanr(form_vec[played], actual[played])[0] if played.sum() > 3 else np.nan
         if collect is not None:
             real_pos = ms_stats["pos"] if "pos" in ms_stats.columns else None
+            ap = points_parts(ms_stats.reset_index(), roles).set_index(ms_stats.index)
+            sd = sim["points"].std(axis=0)
+            order_idx = {p_.name: k_ for k_, p_ in enumerate(list(ta.batting_order) + list(tb.batting_order))}
             for i, p_ in enumerate(plist):
-                collect.append({"match_id": r.match_id, "date": r.date, "name": p_.name, "role": p_.role,
-                                "pred": float(mean[i]), "form": float(form_vec[i]), "actual": float(actual[i]),
-                                "played": bool(played[i]),
-                                "pred_bowl_balls": float(sim["bowl_balls_pred"][i]) if "bowl_balls_pred" in sim else np.nan,
-                                "real_bowl_balls": float(ms_stats["bowl_balls"].get(p_.name, 0)),
-                                "real_pos": float(real_pos.get(p_.name, np.nan)) if real_pos is not None else np.nan})
+                tm = ta if p_.team == ta.name else tb
+                bw = dict(zip([b_.name for b_ in tm.bowlers], tm.bowl_weights or [np.nan] * len(tm.bowlers)))
+                collect.append({
+                    "match_id": r.match_id, "date": r.date, "league": r.league, "venue": r.venue_key, "name": p_.name,
+                    "team": p_.team, "bats_first": p_.team == ta.name, "role": p_.role, "credits": p_.credits,
+                    "pred": float(mean[i]), "pred_std": float(sd[i]), "pred_p10": float(p10_[i]), "pred_p90": float(p90_[i]),
+                    "pred_bat": float(sim["parts"]["bat"][:, i].mean()), "pred_bowl": float(sim["parts"]["bowl"][:, i].mean()),
+                    "pred_field": float(sim["parts"]["field"][:, i].mean()),
+                    "form": float(form_vec[i]), "actual": float(actual[i]), "played": bool(played[i]),
+                    "act_bat": float(ap["bat"].get(p_.name, np.nan)), "act_bowl": float(ap["bowl"].get(p_.name, np.nan)),
+                    "act_field": float(ap["field"].get(p_.name, np.nan)),
+                    "plan_pos": order_idx.get(p_.name, np.nan), "bowl_weight": bw.get(p_.name, np.nan),
+                    "is_sub": bool(tm.impact and tm.impact.player.name == p_.name),
+                    "real_pos": float(real_pos.get(p_.name, np.nan)) if real_pos is not None else np.nan,
+                    "real_balls": float(ms_stats["balls"].get(p_.name, 0)), "real_runs": float(ms_stats["runs"].get(p_.name, 0)),
+                    "real_bowl_balls": float(ms_stats["bowl_balls"].get(p_.name, 0)), "real_wkts": float(ms_stats["wkts"].get(p_.name, 0)),
+                    "hist_matches": float(hist.get(p_.name, {}).get("matches", 0)),
+                    "hist_bowl_balls": float(hist.get(p_.name, {}).get("bowl_balls", 0)),
+                    "hist_bat_balls": float(hist.get(p_.name, {}).get("bat_balls", 0)),
+                    "hist_pos": float(hist.get(p_.name, {}).get("pos", np.nan)),
+                })
         top = lambda v: set(np.argsort(-v)[:5])
-        p10, p90 = np.percentile(sim["points"], [10, 90], axis=0)
+        p10_, p90_ = np.percentile(sim["points"], [10, 90], axis=0)
+        p10, p90 = p10_, p90_
 
         best = pick_team(plist, sim["points"])
         form_pick = pick_team(plist, form_vec[None, :])

@@ -35,7 +35,7 @@ T20_RULES = {
 }
 
 
-def score(stats: dict[str, np.ndarray], roles: list[str], rules: dict = T20_RULES) -> np.ndarray:
+def score(stats: dict[str, np.ndarray], roles: list[str], rules: dict = T20_RULES, parts: bool = False):
     """Turn simulated match stats into Dream11 points.
 
     ``stats`` holds arrays of shape (n_sims, n_players). ``roles`` is one of
@@ -46,6 +46,7 @@ def score(stats: dict[str, np.ndarray], roles: list[str], rules: dict = T20_RULE
     played = stats.get("played", np.ones(runs.shape, dtype=bool))
     pts = np.full(runs.shape, float(r["playing_xi"]))
 
+    base_pts = pts.copy()
     # batting
     pts += runs * r["run"] + stats["fours"] * r["four_bonus"] + stats["sixes"] * r["six_bonus"]
     pts += np.where(runs >= 100, r["bonus_100"], np.where(runs >= 50, r["bonus_50"],
@@ -60,6 +61,7 @@ def score(stats: dict[str, np.ndarray], roles: list[str], rules: dict = T20_RULE
         sr_pts = np.where(sr >= lower, p, sr_pts)
     pts += np.where((balls >= 10) & not_bowler[None, :], sr_pts, 0)
 
+    bat_pts = pts - base_pts
     # bowling
     w = stats["wkts"]
     pts += stats["dots"] * r["dot_ball"] + w * r["wicket"] + stats["bl_wkts"] * r["bowled_lbw_bonus"]
@@ -73,8 +75,14 @@ def score(stats: dict[str, np.ndarray], roles: list[str], rules: dict = T20_RULE
         e_pts = np.where(econ < upper, p, e_pts)
     pts += np.where(overs >= 2, e_pts, 0)
 
+    bowl_pts = pts - base_pts - bat_pts
     # fielding
     c = stats["catches"]
     pts += c * r["catch"] + np.where(c >= 3, r["catches_3_bonus"], 0)
     pts += stats["stumpings"] * r["stumping"] + stats["run_outs"] * r["run_out"]
-    return np.where(played, pts, 0.0)
+    total = np.where(played, pts, 0.0)
+    if parts:
+        field_pts = pts - base_pts - bat_pts - bowl_pts
+        keep = lambda x: np.where(played, x, 0.0)
+        return total, {"base": keep(base_pts), "bat": keep(bat_pts), "bowl": keep(bowl_pts), "field": keep(field_pts)}
+    return total

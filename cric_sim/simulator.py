@@ -331,6 +331,7 @@ def simulate(model: RateModel, team_a: Team, team_b: Team, n_sims: int = 5000, s
     counts = rng.multinomial(n_sims, [(1 - pa) * (1 - pb), pa * (1 - pb), (1 - pa) * pb, pa * pb])
     ra, rb = len(team_a.roster), len(team_b.roster)
     pts_a, pts_b, a_scores, b_scores = [], [], [], []
+    parts_a, parts_b = [], []
 
     for g, cnt in enumerate(counts):
         if cnt == 0:
@@ -354,16 +355,19 @@ def simulate(model: RateModel, team_a: Team, team_b: Team, n_sims: int = 5000, s
             played_a[:, 11] = ua
         if team_b.impact:
             played_b[:, 11] = ub
-        pts_a.append(score(_stats(bs1, bo2, played_a), [p.role for p in team_a.roster], rules))
-        pts_b.append(score(_stats(bs2, bo1, played_b), [p.role for p in team_b.roster], rules))
+        ta_, pa_ = score(_stats(bs1, bo2, played_a), [p.role for p in team_a.roster], rules, parts=True)
+        tb_, pb_ = score(_stats(bs2, bo1, played_b), [p.role for p in team_b.roster], rules, parts=True)
+        pts_a.append(ta_); pts_b.append(tb_); parts_a.append(pa_); parts_b.append(pb_)
         a_scores.append(sc1)
         b_scores.append(sc2)
 
     pa_pts, pb_pts = np.vstack(pts_a), np.vstack(pts_b)
+    comp = {k: np.hstack([np.vstack([x[k] for x in parts_a]), np.vstack([x[k] for x in parts_b])]) for k in parts_a[0]}
     sa, sb = np.concatenate(a_scores), np.concatenate(b_scores)
     return {
         "players": team_a.roster + team_b.roster,
         "points": np.hstack([pa_pts, pb_pts]),
+        "parts": comp,  # per simulation: base / bat / bowl / field points
         "p_a_wins": float((sa > sb).mean()),
         "p_b_wins": float((sb > sa).mean()),
         "avg_score_a": float(sa.mean()),
