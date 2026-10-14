@@ -1,0 +1,122 @@
+{
+ "team_a": {
+  "name": "A",
+  "players": [
+   {
+    "name": "A1",
+    "role": "WK",
+    "credits": 9
+   },
+   {
+    "name": "A2",
+    "role": "BAT",
+    "credits": 10
+   },
+   {
+    "name": "A3",
+    "role": "BAT",
+    "credits": 9
+   },
+   {
+    "name": "A4",
+    "role": "BAT",
+    "credits": 8.5
+   },
+   {
+    "name": "A5",
+    "role": "AR",
+    "credits": 9
+   },
+   {
+    "name": "A6",
+    "role": "AR",
+    "credits": 8.5
+   },
+   {
+    "name": "A7",
+    "role": "BOWL",
+    "credits": 8
+   },
+   {
+    "name": "A8",
+    "role": "BOWL",
+    "credits": 8.5
+   },
+   {
+    "name": "A9",
+    "role": "BOWL",
+    "credits": 8
+   },
+   {
+    "name": "A10",
+    "role": "BOWL",
+    "credits": 8
+   },
+   {
+    "name": "A11",
+    "role": "BOWL",
+    "credits": 7.5
+   }
+  ]
+ },
+ "team_b": {
+  "name": "B",
+  "players": [
+   {
+    "name": "B1",
+    "role": "WK",
+    "credits": 9
+   },
+   {
+    "name": "B2",
+    "role": "BAT",
+    "credits": 10
+   },
+   {
+    "name": "B3",
+    "role": "BAT",
+    "credits": 9
+   },
+   {
+    "name": "B4",
+    "role": "BAT",
+    "credits": 8.5
+   },
+   {
+    "name": "B5",
+    "role": "AR",
+    "credits": 9
+   },
+   {
+    "name": "B6",
+    "role": "AR",
+    "credits": 8.5
+   },
+   {
+    "name": "B7",
+    "role": "BOWL",
+    "credits": 8
+   },
+   {
+    "name": "B8",
+    "role": "BOWL",
+    "credits": 8.5
+   },
+   {
+    "name": "B9",
+    "role": "BOWL",
+    "credits": 8
+   },
+   {
+    "name": "B10",
+    "role": "BOWL",
+    "credits": 8
+   },
+   {
+    "name": "B11",
+    "role": "BOWL",
+    "credits": 7.5
+   }
+  ]
+ }
+}
