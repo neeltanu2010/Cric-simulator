@@ -50,6 +50,8 @@ class Team:
     impact: Impact | None = None
     bowl_plan: list[str] | None = None  # optional: bowler name for each of the 20 overs
     bowl_weights: list[float] | None = None  # how likely each bowler is to bowl (e.g. usual overs per match)
+    pos_hist: dict[str, list[float]] | None = None  # recent real batting positions (0 = opener) per player
+    phase_overs: dict[str, tuple[float, float, float]] | None = None  # usual overs per match in PP / middle / death
 
     def __post_init__(self):
         if len(self.batting_order) != 11:
@@ -84,6 +86,51 @@ def _plans(bowl: list, weights: list[float] | None, explicit: list[str] | None, 
     for o in range(20):
         plan[:, o] = ranked[np.arange(n), o % k]
     return plan
+
+
+def _phase_plans(bowl: list, phase_overs: dict, n: int, rng: np.random.Generator) -> np.ndarray:
+    """Over-by-over bowler choice for each simulation, from how much each bowler really bowls in the
+    powerplay (overs 1-6), middle (7-16) and death (17-20). Max 4 overs each, never two in a row."""
+    nb = len(bowl)
+    typical = np.mean([v for v in phase_overs.values()], axis=0) if phase_overs else np.array([1.0, 1.5, 0.7])
+    per_over = np.array([np.array(phase_overs.get(p.name, typical * 0.5), dtype=float) for _, p in bowl])
+    per_over = per_over / np.array([6.0, 10.0, 4.0])  # chance-like weight per over in each phase
+    per_over = per_over.clip(min=1e-3)
+    plan = np.zeros((n, 20), dtype=int)
+    used = np.zeros((n, nb))
+    prev = np.full(n, -1)
+    rows = np.arange(n)
+    for o in range(20):
+        ph = 0 if o < 6 else (1 if o < 16 else 2)
+        w = np.tile(per_over[:, ph], (n, 1))
+        w[used >= 4] = 0.0
+        w[rows, prev.clip(min=0)] *= (prev < 0)  # no bowler twice in a row
+        # make sure enough overs remain: a bowler who must bowl to finish the innings gets priority
+        left = (4 - used).clip(min=0)
+        dead = w.sum(axis=1) <= 0
+        if dead.any():
+            w[dead] = (left[dead] > 0).astype(float)
+            w[dead, prev[dead].clip(min=0)] *= (prev[dead] < 0)
+        w = w / np.maximum(w.sum(axis=1, keepdims=True), 1e-12)
+        pick = (rng.random(n)[:, None] > np.cumsum(w, axis=1)).sum(axis=1).clip(max=nb - 1)
+        plan[:, o] = pick
+        used[rows, pick] += 1
+        prev = pick
+    return plan
+
+
+def _emp_order(bat: list, pos_hist: dict, n: int, rng: np.random.Generator) -> np.ndarray:
+    """Batting order for each simulation from each player's recent real positions."""
+    nb = len(bat)
+    keys = np.zeros((n, nb))
+    for i, (_, p) in enumerate(bat):
+        h = [x for x in (pos_hist.get(p.name) or []) if x == x]
+        if len(h) >= 3:
+            keys[:, i] = np.array(h)[rng.integers(0, len(h), size=n)]
+        else:
+            keys[:, i] = i + rng.normal(size=n) * (0.25 + 0.2 * i)
+    keys += rng.random((n, nb)) * 0.5  # break ties at random
+    return np.argsort(keys, axis=1)
 
 
 def _order(nb: int, n: int, rng: np.random.Generator, random_lineup: bool) -> np.ndarray:
@@ -342,13 +389,17 @@ def simulate(model: RateModel, team_a: Team, team_b: Team, n_sims: int = 5000, s
         # innings 1: A bats, B bowls and fields (its starting XI)
         rl = model.has("lineup")
         cond = rng.normal(size=cnt) * model.sigmas[2] if model.has("form") else np.zeros(cnt)
-        plan_b = _plans(b_bowl, _weights(team_b, b_bowl), team_b.bowl_plan, cnt, rng, rl)
+        plan_b = (_phase_plans(b_bowl, team_b.phase_overs, cnt, rng) if rl and team_b.phase_overs and not team_b.bowl_plan
+                  else _plans(b_bowl, _weights(team_b, b_bowl), team_b.bowl_plan, cnt, rng, rl))
+        ord_a = _emp_order(a_bat, team_a.pos_hist, cnt, rng) if rl and team_a.pos_hist else _order(len(a_bat), cnt, rng, rl)
         bs1, bo1, sc1, _ = _innings(model, venue, 1, a_bat, b_bowl, b_field, _keeper(team_b), plan_b,
-                                    _order(len(a_bat), cnt, rng, rl), cnt, rng, None, (ra, rb), league, cond)
+                                    ord_a, cnt, rng, None, (ra, rb), league, cond)
         # innings 2: B chases (maybe with its impact batter), A bowls (maybe with its impact bowler)
-        plan_a = _plans(a_bowl, _weights(team_a, a_bowl), team_a.bowl_plan, cnt, rng, rl)
+        plan_a = (_phase_plans(a_bowl, team_a.phase_overs, cnt, rng) if rl and team_a.phase_overs and not team_a.bowl_plan
+                  else _plans(a_bowl, _weights(team_a, a_bowl), team_a.bowl_plan, cnt, rng, rl))
+        ord_b = _emp_order(b_bat, team_b.pos_hist, cnt, rng) if rl and team_b.pos_hist else _order(len(b_bat), cnt, rng, rl)
         bs2, bo2, sc2, _ = _innings(model, venue, 2, b_bat, a_bowl, a_field, _keeper(team_a), plan_a,
-                                    _order(len(b_bat), cnt, rng, rl), cnt, rng, sc1 + 1, (rb, ra), league, cond)
+                                    ord_b, cnt, rng, sc1 + 1, (rb, ra), league, cond)
         played_a = np.ones((cnt, ra), dtype=bool)
         played_b = np.ones((cnt, rb), dtype=bool)
         if team_a.impact:

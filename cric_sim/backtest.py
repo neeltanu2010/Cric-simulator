@@ -69,6 +69,7 @@ class BTConfig:
     half_life_days: float = 730.0
     prior_scale: float = 1.0
     mean_preserving: bool = False  # cancel the score drift caused by day-to-day swings
+    empirical_lineup: bool = False  # draw batting positions and bowling overs from each player's real history
 
 
 def _team_xi(names, sub, hist):
@@ -115,6 +116,10 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
     inn_tot = balls_f.groupby(["match_id", "innings"])["runs_total"].sum().unstack()
     inn_tot = inn_tot.join(ms.set_index("match_id")[["venue_key", "date"]])
 
+    if cfg.empirical_lineup:
+        lg = balls_f[~(balls_f["wide"] | balls_f["noball"])]
+        bph = lg.groupby(["match_id", "bowler", "phase"]).size().unstack(fill_value=0).reindex(columns=[0, 1, 2], fill_value=0) / 6.0
+        bph = bph.reset_index().rename(columns={"bowler": "name"})
     rows, model, model_n = [], None, 10 ** 9
     by_match: dict = {}
     t0 = time.time()
@@ -201,8 +206,20 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
                 sub_role = roles.get(imp[0], "BAT")
                 impact = Impact(Player(imp[0], sub_role, cred[imp[0]], team_name),
                                 "bowl" if team_name == r.team_a else "bat", imp[1], 1.0)
+            pos_hist = phase_ov = None
+            if cfg.empirical_lineup:
+                pool_names = order + ([imp[0]] if imp else [])
+                ps = past_s[past_s["name"].isin(pool_names)].sort_values("date")
+                pos_hist = {n: g["pos"].dropna().tail(10).tolist() for n, g in ps.groupby("name")}
+                # usual overs per phase over each bowler's last 15 matches (0 in matches where he did not bowl)
+                phase_ov = {}
+                for n, g in ps.groupby("name"):
+                    mids = g["match_id"].tail(15)
+                    b = bph[(bph["name"] == n) & bph["match_id"].isin(mids)]
+                    if len(mids):
+                        phase_ov[n] = tuple(b[[0, 1, 2]].sum().to_numpy() / len(mids))
             built.append(Team(team_name, [players[n] for n in order], [players[n] for n in bowl_names], impact,
-                              bowl_weights=bowl_w))
+                              bowl_weights=bowl_w, pos_hist=pos_hist, phase_overs=phase_ov))
         ta, tb = built
 
         sim = simulate(model, ta, tb, n_sims=cfg.sims, seed=int(rng.integers(1 << 31)), venue=r.venue_key, league=r.league)
