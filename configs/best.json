@@ -1,0 +1,26 @@
+{
+ "features": [
+  "lineup",
+  "form",
+  "venue",
+  "type",
+  "innings",
+  "state",
+  "extras",
+  "impact",
+  "league"
+ ],
+ "sigmas": [
+  0.7,
+  0.35,
+  0.2
+ ],
+ "half_life_days": 3000.0,
+ "prior_scale": 4.0,
+ "pool": "leagues",
+ "simulator_share": 0.5,
+ "chosen_on": "IPL 2023-24 validation",
+ "validation_xi_points": 740.1103448275862,
+ "test_xi_points": 760.6621621621622,
+ "test_form_points": 717.0641891891892
+}

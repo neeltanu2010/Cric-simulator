@@ -13,8 +13,8 @@ For every test match, in date order:
         oracle  the best possible team in hindsight (an upper limit, not a real strategy)
 
 Known weaknesses (the report prints these too):
-  * Impact player identity is taken from the real match, so the "impact" feature looks a bit
-    better here than it can in real life.
+  * Cricsheet does not say who the impact sub was, only that 12 names are listed. The backtest
+    guesses the sub and who he replaces from past matches. Wrong guesses cost accuracy.
   * Credits are estimated from form, not the real Dream11 credits.
 """
 from __future__ import annotations
@@ -35,13 +35,17 @@ from .optimizer import pick_team
 from .players import bowl_types, load_player_csv
 from .simulator import Impact, Player, Team, simulate
 
+BLENDS = (0.1, 0.25, 0.5, 0.75, 0.9)  # share of the simulator in a simulator/form mix
+
 STAGES = [  # name, features switched on (cumulative)
     ("players only", ()),
-    ("+ ground", ("venue",)),
-    ("+ pace/spin", ("venue", "type")),
-    ("+ innings/toss", ("venue", "type", "innings")),
-    ("+ game situation", ("venue", "type", "innings", "state")),
-    ("+ extras", ("venue", "type", "innings", "state", "extras")),
+    ("+ lineup uncertainty", ("lineup",)),
+    ("+ day-to-day form", ("lineup", "form")),
+    ("+ ground", ("lineup", "form", "venue")),
+    ("+ pace/spin", ("lineup", "form", "venue", "type")),
+    ("+ innings/toss", ("lineup", "form", "venue", "type", "innings")),
+    ("+ game situation", ("lineup", "form", "venue", "type", "innings", "state")),
+    ("+ extras", ("lineup", "form", "venue", "type", "innings", "state", "extras")),
     ("+ impact (full)", ALL_FEATURES),
 ]
 
@@ -58,6 +62,12 @@ class BTConfig:
     types_override: dict | None = None
     random_draws: int = 20
     label: str = "full"
+    test_league: str | None = None  # only test matches from this league (training uses all)
+    test_before: str | None = None  # only test matches before this date (for tuning on older seasons)
+    sigmas: tuple = (0.25, 0.15, 0.12)  # day-to-day variation in batter form, bowler form, conditions
+    half_life_days: float = 730.0
+    prior_scale: float = 1.0
+    mean_preserving: bool = False  # cancel the score drift caused by day-to-day swings
 
 
 def _team_xi(names, sub, hist):
@@ -69,8 +79,11 @@ def _team_xi(names, sub, hist):
     return None, None
 
 
-def _impact_rate(matches: pd.DataFrame, before: pd.Timestamp) -> float:
-    m = matches[matches["date"] < before].tail(80)
+def _impact_rate(matches: pd.DataFrame, before: pd.Timestamp, league: str | None = None) -> float:
+    m = matches[matches["date"] < before]
+    if league:
+        m = m[m["league"] == league]
+    m = m.tail(80)
     if m.empty:
         return 0.0
     used = np.concatenate([(m["players_a"].map(len) > 11).to_numpy(), (m["players_b"].map(len) > 11).to_numpy()])
@@ -84,27 +97,42 @@ def _score_xi(res, idx_of, actual):
 
 
 def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFrame, cfg: BTConfig,
-                 progress: bool = False) -> pd.DataFrame:
-    """Returns one row per test match."""
+                 progress: bool = False, collect: list | None = None, fit_cache: dict | None = None) -> pd.DataFrame:
+    """Returns one row per test match. If ``collect`` is a list, one dict per player per match is added
+    to it (predicted vs real points, role, expected batting position), for diagnosing the model."""
     rng = np.random.default_rng(cfg.seed)
     ms = matches.sort_values(["date", "match_id"]).reset_index(drop=True)
-    start = max(cfg.min_history, len(ms) - cfg.n_test)
-    test = ms.iloc[start:]
+    pool = ms.iloc[cfg.min_history:]
+    if cfg.test_league:
+        pool = pool[pool["league"] == cfg.test_league]
+    if cfg.test_before:
+        pool = pool[pool["date"] < pd.Timestamp(cfg.test_before)]
+    test = pool.tail(cfg.n_test)
     csv_over = load_player_csv(cfg.types_csv)
     inn_tot = balls_f.groupby(["match_id", "innings"])["runs_total"].sum().unstack()
     inn_tot = inn_tot.join(ms.set_index("match_id")[["venue_key", "date"]])
 
     rows, model, model_n = [], None, 10 ** 9
+    by_match: dict = {}
     t0 = time.time()
     for k, r in enumerate(test.itertuples()):
         past_b = None
         if model is None or model_n >= cfg.refit_every:
-            past_b = balls_f[balls_f["date"] < r.date]
-            types = dict(bowl_types(past_b, cfg.types_csv))
-            if cfg.types_override:
-                types.update(cfg.types_override)
-            model = RateModel(features=cfg.features).fit(past_b, types)
+            # settings that do not change the fit (day-to-day variation, blending) can share a fitted model
+            key = (tuple(sorted(cfg.features)), cfg.half_life_days, cfg.prior_scale, str(r.date), cfg.types_csv)
+            model = fit_cache.get(key) if fit_cache is not None else None
+            if model is None:
+                past_b = balls_f[balls_f["date"] < r.date]
+                types = dict(bowl_types(past_b, cfg.types_csv))
+                if cfg.types_override:
+                    types.update(cfg.types_override)
+                model = RateModel(features=cfg.features, sigmas=cfg.sigmas, half_life_days=cfg.half_life_days,
+                                  prior_scale=cfg.prior_scale, mean_preserving=cfg.mean_preserving).fit(past_b, types)
+                if fit_cache is not None:
+                    fit_cache[key] = model
             model_n = 0
+        model.sigmas = cfg.sigmas
+        model.mean_preserving = cfg.mean_preserving
         model_n += 1
 
         past_s = stats[stats["date"] < r.date]
@@ -114,22 +142,42 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
 
         teams = []
         ok = True
-        p_imp = _impact_rate(ms, r.date) if model.has("impact") else 0.0
+        p_imp = _impact_rate(ms, r.date, r.league) if model.has("impact") else 0.0
         for team_name, names, first in ((r.team_a, r.players_a, True), (r.team_b, r.players_b, False)):
             sub = None
-            for x in r.replacements:
+            for x in r.replacements:  # only present if the data says who was substituted
                 if x["team"] == team_name and x["in"] in names and x["out"] in names:
                     sub = (x["in"], x["out"])
                     break
             xi, imp = _team_xi(names, sub, hist)
             if xi is None:
-                # 12 players listed but no substitution info: use the 11 with most matches played
-                if len(names) > 11:
-                    xi = sorted(names, key=lambda n: -hist.get(n, {}).get("matches", 0))[:11]
-                else:
+                if len(names) < 11:
                     ok = False
                     break
-                imp = None
+                # Cricsheet lists 12 names but not who the impact sub was. At the toss you would know the
+                # XI, so recover it from who was on the field: the sub cannot have batted in the first
+                # innings (team batting first) or bowled in the first innings (chasing team). Among the
+                # remaining names, the one used least by this team recently is the sub.
+                mb = by_match.get(r.match_id)
+                if mb is None:
+                    mb = by_match[r.match_id] = balls_f[balls_f["match_id"] == r.match_id]
+                if first:
+                    on_field = set(mb.loc[(mb["innings"] == 1), "batter"]) | set(mb.loc[(mb["innings"] == 1), "non_striker"])
+                else:
+                    on_field = set(mb.loc[(mb["innings"] == 1), "bowler"])
+                tm = past_s[past_s["team"] == team_name].drop_duplicates("match_id").tail(15)["match_id"]
+                recent = past_s[past_s["match_id"].isin(tm) & (past_s["team"] == team_name)].groupby("name").size()
+                cands = [n for n in names if n not in on_field] or list(names)
+                sub_name = min(cands, key=lambda n: recent.get(n, 99))  # newcomers are assumed to start
+                xi = [n for n in names if n != sub_name][:11]
+                h = lambda n, k: hist.get(n, {}).get(k, 0.0)
+                if first:  # bowling sub replaces a batter who has already batted (not the keeper)
+                    pool = [n for n in xi if n in on_field and roles.get(n) != "WK"] or xi
+                    out = min(pool, key=lambda n: (h(n, "bowl_balls"), -h(n, "bat_balls")))
+                else:  # batting sub replaces a bowler who has already bowled
+                    pool = [n for n in xi if n in on_field] or xi
+                    out = max(pool, key=lambda n: h(n, "bowl_balls") - 0.1 * h(n, "bat_balls"))
+                imp = (sub_name, out)
             teams.append((team_name, xi, imp))
         if not ok:
             continue
@@ -140,17 +188,21 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
         for team_name, xi, imp in teams:
             order = order_by_position(xi, hist, roles)
             players = {n: Player(n, roles.get(n, "BAT"), cred[n], team_name) for n in order}
-            bowl_names = pick_bowlers(order, hist, roles)
+            bowl_names = pick_bowlers(order, hist, roles, k=8)
+            bowl_w = [hist[n]["bowl_balls"] / 6 if n in hist else 1.0 for n in bowl_names]
             impact = None
             if imp and p_imp > 0:
+                # The data only lists a sub who played, so score him as playing (p_used = 1) to match the
+                # truth. In live use, set p_used < 1 in the squad file. His job follows the innings order:
+                # a bowling sub for the team batting first, a batting sub for the chasing team.
                 sub_role = roles.get(imp[0], "BAT")
-                is_bowler = sub_role in ("BOWL", "AR") and hist.get(imp[0], {}).get("bowl_balls", 0) >= 6
                 impact = Impact(Player(imp[0], sub_role, cred[imp[0]], team_name),
-                                "bowl" if is_bowler else "bat", imp[1], p_imp)
-            built.append(Team(team_name, [players[n] for n in order], [players[n] for n in bowl_names], impact))
+                                "bowl" if team_name == r.team_a else "bat", imp[1], 1.0)
+            built.append(Team(team_name, [players[n] for n in order], [players[n] for n in bowl_names], impact,
+                              bowl_weights=bowl_w))
         ta, tb = built
 
-        sim = simulate(model, ta, tb, n_sims=cfg.sims, seed=int(rng.integers(1 << 31)), venue=r.venue_key)
+        sim = simulate(model, ta, tb, n_sims=cfg.sims, seed=int(rng.integers(1 << 31)), venue=r.venue_key, league=r.league)
         plist = sim["players"]
         names = [p.name for p in plist]
         idx_of = {n: i for i, n in enumerate(names)}
@@ -166,12 +218,24 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
         form_vec = np.array([form.get(n, role_mean.get(roles.get(n, "BAT"), glob)) for n in names])
         sp = spearmanr(mean[played], actual[played])[0] if played.sum() > 3 else np.nan
         sp_form = spearmanr(form_vec[played], actual[played])[0] if played.sum() > 3 else np.nan
+        if collect is not None:
+            real_pos = ms_stats["pos"] if "pos" in ms_stats.columns else None
+            for i, p_ in enumerate(plist):
+                collect.append({"match_id": r.match_id, "date": r.date, "name": p_.name, "role": p_.role,
+                                "pred": float(mean[i]), "form": float(form_vec[i]), "actual": float(actual[i]),
+                                "played": bool(played[i]),
+                                "pred_bowl_balls": float(sim["bowl_balls_pred"][i]) if "bowl_balls_pred" in sim else np.nan,
+                                "real_bowl_balls": float(ms_stats["bowl_balls"].get(p_.name, 0)),
+                                "real_pos": float(real_pos.get(p_.name, np.nan)) if real_pos is not None else np.nan})
         top = lambda v: set(np.argsort(-v)[:5])
         p10, p90 = np.percentile(sim["points"], [10, 90], axis=0)
 
         best = pick_team(plist, sim["points"])
         form_pick = pick_team(plist, form_vec[None, :])
         oracle = pick_team(plist, actual[None, :])
+        blends = {f"pts_blend{int(a * 100)}": _score_xi(pick_team(plist, (a * mean + (1 - a) * form_vec)[None, :]), idx_of, actual)
+                  for a in BLENDS}
+        sp_blend = spearmanr((0.5 * mean + 0.5 * form_vec)[played], actual[played])[0] if played.sum() > 3 else np.nan
         rand = np.mean([_score_xi(pick_team(plist, rng.random((1, len(plist)))), idx_of, actual)
                         for _ in range(cfg.random_draws)])
 
@@ -192,7 +256,8 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
             "top5_form": len(top(np.where(played, form_vec, -1)) & top(np.where(played, actual, -1))),
             "cover": float(((actual >= p10) & (actual <= p90))[played].mean()),
             "pts_model": _score_xi(best, idx_of, actual), "pts_form": _score_xi(form_pick, idx_of, actual),
-            "pts_random": float(rand), "pts_oracle": _score_xi(oracle, idx_of, actual),
+            "pts_random": float(rand), "pts_oracle": _score_xi(oracle, idx_of, actual), **blends,
+            "spearman_blend50": sp_blend,
             "pred_a": sim["avg_score_a"], "pred_b": sim["avg_score_b"], "act_a": a_tot, "act_b": b_tot,
             "base_a": base_venue, "p_a_win": wa, "a_won": a_won, "base_p": base_wr,
         })
@@ -219,6 +284,11 @@ def summarize(df: pd.DataFrame) -> dict:
         lo, hi = _boot(diff)
         out[f"model_minus_{other}"] = {"mean": float(diff.mean()), "ci95": [lo, hi],
                                        "win_rate": float((diff > 0).mean())}
+    for a in BLENDS:
+        k = f"pts_blend{int(a * 100)}"
+        diff = (d[k] - d["pts_form"]).to_numpy()
+        out[k] = {"pts": float(d[k].mean()), "minus_form": float(diff.mean()), "ci95": list(_boot(diff))}
+    out["spearman_blend50"] = float(d["spearman_blend50"].mean())
     out["spearman"] = float(d["spearman"].mean())
     out["spearman_form"] = float(d["spearman_form"].mean())
     out["mae"], out["mae_form"] = float(d["mae"].mean()), float(d["mae_form"].mean())
@@ -262,8 +332,13 @@ def format_report(summary: dict, title="Backtest") -> str:
         x = s[f"model_minus_{other}"]
         L.append(f"- Model minus {other}: **{x['mean']:+.1f} pts per match** "
                  f"(95% range {x['ci95'][0]:+.1f} to {x['ci95'][1]:+.1f}); model won {x['win_rate']:.0%} of matches")
+    L += ["", "## Mixing the simulator with the form baseline", "",
+          "| Share of simulator | Avg points | vs form baseline (95% range) |", "|---|---:|---|"]
+    for a in BLENDS:
+        b = s[f"pts_blend{int(a * 100)}"]
+        L.append(f"| {a:.0%} | {b['pts']:.1f} | {b['minus_form']:+.1f} ({b['ci95'][0]:+.1f} to {b['ci95'][1]:+.1f}) |")
     L += ["", "## Player predictions", "",
-          f"- Rank correlation with real points: model {s['spearman']:.3f}, form baseline {s['spearman_form']:.3f}",
+          f"- Rank correlation with real points: model {s['spearman']:.3f}, form baseline {s['spearman_form']:.3f}, 50/50 mix {s['spearman_blend50']:.3f}",
           f"- Average error per player: model {s['mae']:.1f}, form baseline {s['mae_form']:.1f}",
           f"- Predicted top-5 players that really were top-5: model {s['top5']:.2f}, form {s['top5_form']:.2f} (of 5)",
           f"- Real points inside the model's 10-90% range: {s['coverage_p10_p90']:.0%} (80% would be perfectly calibrated)",

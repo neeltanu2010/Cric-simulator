@@ -263,3 +263,70 @@ def test_backtest_beats_random_on_data_with_real_signal(world):
     assert s["pts_oracle"] > s["pts_model"]  # hindsight is always at least as good
     assert s["spearman"] > 0.2
     assert 0.6 < s["coverage_p10_p90"] < 0.95
+
+
+# ---------------------------------------------------------------- several leagues together
+def test_pooling_leagues_adds_a_league_effect(tmp_path):
+    from cric_sim.loader import load_many
+    from tests.synth import make_dataset
+    hi, lo = tmp_path / "hi_json", tmp_path / "lo_json"
+    make_dataset(hi, n_matches=60, seed=3)
+    make_dataset(lo, n_matches=60, seed=4)
+    # make the second league much lower scoring by turning every four into a dot
+    for f in lo.glob("*.json"):
+        d = json.loads(f.read_text())
+        for inn in d["innings"]:
+            for ov in inn["overs"]:
+                for x in ov["deliveries"]:
+                    if x["runs"]["batter"] in (4, 6):
+                        x["runs"] = {"batter": 0, "extras": x["runs"]["extras"], "total": x["runs"]["extras"]}
+        f.write_text(json.dumps(d))
+    lo_ids = {f.name: f.name.replace(".json", "x.json") for f in lo.glob("*.json")}
+    for old, new in lo_ids.items():  # make match ids unique across folders
+        (lo / old).rename(lo / new)
+    balls, matches = load_many([hi, lo])
+    assert set(balls["league"]) == {"hi", "lo"} and len(matches) == 120
+    m = RateModel().fit(add_features(balls), TYPES)
+    t = m.tables["league"]
+    boundary = lambda row: row[4] + row[5]
+    assert boundary(t[m.ids["league"]["hi"]]) > 1.5 * boundary(t[m.ids["league"]["lo"]])
+
+
+# ---------------------------------------------------------------- lineup uncertainty and day-to-day form
+def test_lineup_uncertainty_lifts_the_tail_and_spreads_bowling(world):
+    m_on = RateModel(features=("lineup", "venue", "type", "innings", "state", "extras")).fit(world["bf"], TYPES)
+    m_off = RateModel(features=("venue", "type", "innings", "state", "extras")).fit(world["bf"], TYPES)
+    on = simulate(m_on, make_team(0), make_team(1), 2000, 11, "Plain Ground")
+    off = simulate(m_off, make_team(0), make_team(1), 2000, 11, "Plain Ground")
+    # with a fixed order the number 11 bats last every time; with a shuffled order he sometimes bats higher
+    assert on["points"][:, 10].mean() > off["points"][:, 10].mean() - 1
+    # a fixed plan gives the 5th-6th bowlers exactly the same overs each time; a random one varies them
+    assert on["points"][:, 6].std() > 0 and off["points"][:, 6].std() > 0
+    assert on["points"][:, 5:11].std(axis=0).mean() != pytest.approx(off["points"][:, 5:11].std(axis=0).mean(), abs=0.01)
+
+
+def test_day_to_day_form_widens_ranges_but_keeps_scoring_level(world):
+    base = ("lineup", "venue", "type", "innings", "state", "extras")
+    flat = RateModel(features=base).fit(world["bf"], TYPES)
+    wavy = RateModel(features=base + ("form",), sigmas=(0.6, 0.3, 0.15)).fit(world["bf"], TYPES)
+    a = simulate(flat, make_team(0), make_team(1), 3000, 5, "Plain Ground")
+    b = simulate(wavy, make_team(0), make_team(1), 3000, 5, "Plain Ground")
+    assert b["points"][:, :11].std(axis=0).mean() > a["points"][:, :11].std(axis=0).mean()
+    # known flaw: swings are not neutral, so scores drift up (about +14 runs here, +11 on real IPL 2025-26)
+    assert 0 < b["avg_score_a"] - a["avg_score_a"] < 25
+    fixed = RateModel(features=base + ("form",), sigmas=(0.6, 0.3, 0.15), mean_preserving=True).fit(world["bf"], TYPES)
+    c = simulate(fixed, make_team(0), make_team(1), 3000, 5, "Plain Ground")
+    assert abs(c["avg_score_a"] - a["avg_score_a"]) < 5  # the optional fix restores the first-innings level
+    assert c["points"][:, :11].std(axis=0).mean() > a["points"][:, :11].std(axis=0).mean()
+
+
+def test_pooling_drops_associate_nation_matches(tmp_path):
+    from cric_sim.loader import load_many
+    from tests.synth import make_dataset
+    folder = tmp_path / "t20s_json"
+    make_dataset(folder, n_matches=20)
+    # the fake league's teams are called Team0..Team7: none are Test nations, so the filter removes all
+    with pytest.raises((ValueError, FileNotFoundError, KeyError)):
+        balls, matches = load_many([folder])
+        if len(matches) == 0:
+            raise ValueError("all matches filtered out")

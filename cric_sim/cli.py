@@ -16,7 +16,7 @@ import numpy as np
 
 from .backtest import (BTConfig, STAGES, format_ablation, format_report, prepare, run_ablation,
                        run_backtest, summarize)
-from .loader import load_matches
+from .loader import load_many, load_matches
 from .model import ALL_FEATURES, RateModel
 from .optimizer import pick_team
 from .players import bowl_types, write_template
@@ -25,14 +25,26 @@ from .squads import load_squads
 
 
 def _load(a):
-    balls, matches = load_matches(a.data)
+    balls, matches = load_many(a.data or ["data/ipl_json"])
     bf, st = prepare(balls, matches)
     return balls, matches, bf, st
 
 
 def cmd_predict(a):
-    _, matches, bf, _ = _load(a)
-    model = RateModel().fit(bf, bowl_types(bf, a.types_csv))
+    cfg = json.loads(Path(a.config).read_text()) if a.config and Path(a.config).exists() else {}
+    if cfg and not a.data:
+        from .experiments import POOL_FOLDERS
+        folders, only = POOL_FOLDERS[cfg["pool"]]
+        balls, matches = load_many([f"data/{f}_json" for f in folders], full_members_only=only)
+        bf, st = prepare(balls, matches)
+    else:
+        a.data = a.data or ["data/ipl_json"]
+        _, matches, bf, st = _load(a)
+    kw = dict(features=cfg["features"], sigmas=tuple(cfg["sigmas"]), half_life_days=cfg["half_life_days"],
+              prior_scale=cfg["prior_scale"]) if cfg else {}
+    share = cfg.get("simulator_share", 1.0)
+    print(f"Setting: {a.config if cfg else 'defaults'}  (simulator share {share:.0%} of the team pick)")
+    model = RateModel(**kw).fit(bf, bowl_types(bf, a.types_csv))
     team_a, team_b, venue = load_squads(a.squad)
     venue = a.venue or venue
     unknown = [p.name for t in (team_a, team_b) for p in t.roster if not model.known(p.name)]
@@ -47,7 +59,7 @@ def cmd_predict(a):
         print(f"\nGround: {venue}  ({vs['balls']} balls of data)  runs/over vs league {vs['runs_per_over_vs_league']:+.2f}, "
               f"wicket rate x{vs['wicket_rate_ratio']:.2f}, chasing side won {chase:.0%} of {len(m)} matches")
 
-    sim = simulate(model, team_a, team_b, a.sims, a.seed, venue)
+    sim = simulate(model, team_a, team_b, a.sims, a.seed, venue, league=a.league)
     print(f"\n{team_a.name} (bats first) avg {sim['avg_score_a']:.0f}  win {sim['p_a_wins']:.0%}   |   "
           f"{team_b.name} avg {sim['avg_score_b']:.0f}  win {sim['p_b_wins']:.0%}\n")
     players, pts = sim["players"], sim["points"]
@@ -56,7 +68,15 @@ def cmd_predict(a):
         p = players[i]
         print(f"{p.name:<22}{p.role:<6}{p.credits:>5.1f}{pts[:, i].mean():>7.1f}"
               f"{np.percentile(pts[:, i], 10):>6.0f}{np.percentile(pts[:, i], 90):>6.0f}")
-    best = pick_team(players, pts, risk=a.risk)
+    values = pts
+    if share < 1.0:  # mix the simulator with each player's recent form, as chosen in the experiments
+        from .lineup import form_points, history_table, infer_roles
+        roles = infer_roles(history_table(st))
+        form, role_mean, glob = form_points(st, roles)
+        fv = np.array([form.get(p.name, role_mean.get(p.role, glob)) for p in players])
+        values = share * pts.mean(axis=0)[None, :] + (1 - share) * fv[None, :]
+        print(f"\nValue used to pick the team = {share:.0%} simulator + {1 - share:.0%} recent form")
+    best = pick_team(players, values, risk=a.risk)
     print(f"\nBest XI ({best['credits']:.1f} credits, expected {best['expected_points']:.0f} pts)")
     for p in best["team"]:
         tag = " (C)" if p is best["captain"] else " (VC)" if p is best["vice_captain"] else ""
@@ -66,7 +86,7 @@ def cmd_predict(a):
 def cmd_backtest(a):
     balls, matches, bf, st = _load(a)
     cfg = BTConfig(n_test=a.n_test, min_history=a.min_history, sims=a.sims, refit_every=a.refit_every,
-                   seed=a.seed, types_csv=a.types_csv)
+                   seed=a.seed, types_csv=a.types_csv, test_league=a.test_league)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     t = time.time()
@@ -84,7 +104,7 @@ def cmd_backtest(a):
 
 
 def cmd_types(a):
-    balls, _ = load_matches(a.data)
+    balls, _ = load_many(a.data or ["data/ipl_json"])
     n = write_template(balls, a.out)
     print(f"Wrote {n} bowlers to {a.out}. Open it, fix the bowl_type column (pace/spin) where our guess is wrong,"
           f" then pass --types-csv {a.out}")
@@ -104,13 +124,17 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name, fn in (("predict", cmd_predict), ("backtest", cmd_backtest), ("types", cmd_types), ("venues", cmd_venues)):
         sp = sub.add_parser(name)
-        sp.add_argument("--data", default="data/ipl_json", help="folder of Cricsheet JSON matches")
+        sp.add_argument("--data", nargs="+", default=None,
+                        help="one or more folders of Cricsheet JSON matches (all are used for training); "
+                             "default: ipl_json, or the data pool named in configs/best.json for predict")
         sp.add_argument("--types-csv", default=None, help="CSV: name,bowl_type,role (your corrections)")
         sp.add_argument("--seed", type=int, default=0)
         sp.set_defaults(fn=fn)
         if name == "predict":
             sp.add_argument("squad")
             sp.add_argument("--venue", default=None)
+            sp.add_argument("--league", default="ipl", help="which league's scoring level to use")
+            sp.add_argument("--config", default="configs/best.json", help="setting chosen by the experiments")
             sp.add_argument("--sims", type=int, default=5000)
             sp.add_argument("--risk", type=float, default=0.0, help="0 = safe, 1 = chase upside")
         if name == "backtest":
@@ -119,6 +143,7 @@ def main(argv=None):
             sp.add_argument("--sims", type=int, default=1000)
             sp.add_argument("--refit-every", type=int, default=10)
             sp.add_argument("--ablate", action="store_true", help="add features one at a time")
+            sp.add_argument("--test-league", default=None, help="only test matches from this league, e.g. ipl")
             sp.add_argument("--out", default="reports")
         if name == "types":
             sp.add_argument("--out", default="data/players.csv")

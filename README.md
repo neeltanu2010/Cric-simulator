@@ -26,10 +26,37 @@ python -m cric_sim.cli types --data data/ipl_json --out data/players.csv
 python -m cric_sim.cli venues --data data/ipl_json
 # 4. backtest. Add --ablate to see what each feature adds, one at a time:
 python -m cric_sim.cli backtest --data data/ipl_json --types-csv data/players.csv --n-test 150 --ablate
-# 5. predict a match after the toss (fill squads/example.json first):
-python -m cric_sim.cli predict squads/example.json --data data/ipl_json --types-csv data/players.csv
+# 5. predict a match after the toss (uses the setting in configs/best.json; fill a squad file first):
+python -m cric_sim.cli predict squads/example_ipl.json --types-csv data/players.csv
+# 6. rerun the whole experiment (about 2 hours on 4 cores):
+for g in features hyperA hyperB pools; do python -m cric_sim.experiments worker $g & done; wait
+python -m cric_sim.experiments final
 python -m pytest
 ```
+
+## Results on real data (read this first)
+All 6 data files were used for learning (IPL, BBL, PSL, SA20, T20 World Cup, men's T20 internationals; internationals between associate nations are dropped). Every test match is predicted using only matches played before it.
+
+**Settings tried:** 70 settings x 6 "how much to trust the simulator" mixes = 420 recorded results (`reports/experiments/results.csv`, top 30 in `leaderboard.md`). The full grid on paper is 516,096 combinations (512 effect on/off sets x 4 swing sizes x 4 memory lengths x 3 pull-to-average strengths x 3 data pools x 7 pick mixes), so this is a structured sample, not all of them.
+
+**Chosen on IPL 2023-24, tested once on IPL 2025-26 (148 matches)** (`configs/best.json`, `reports/experiments/final_report.md`):
+
+| Method | Avg Dream11 points of the picked XI |
+|---|---:|
+| Best setting (50% simulator + 50% recent form) | 760.7 |
+| Simulator alone | 765.7 |
+| Recent-form baseline | 717.1 |
+| Random valid team | 610.0 |
+| Best possible in hindsight | 1143.1 |
+
+The best setting beat the form baseline by +43.6 points per match (95% range +22.7 to +65.5). The same setting on the validation seasons was +25 to +30, and some settings with the simulator alone were no better than form there. So the edge over a simple form rule is **real but modest and not stable**. Many settings are within noise of each other: the top 20 are only 7 points apart.
+
+What the experiments showed:
+- Day-to-day variation in player form is the one effect that clearly matters (it fixed the over-narrow ranges). Ground, pace/spin, toss/chase, game situation, extras and impact players each add little that can be measured with 145-148 test matches. A model with only the player and day-to-day form effects did about as well as the full model.
+- Mixing the simulator with recent form beats either alone on the validation seasons.
+- Predicted first-innings scores are off by a season-dependent amount: about +0 runs in 2023-24 but +11 runs in 2025-26 (second innings about +1). I tried cancelling the day-to-day-swing drift (`mean_preserving=True`) and it made team picks **worse** in both periods (held-out 751 vs 761 points), so it stays off. The likely cause is that the league scoring level moves from year to year; re-centring the model on recent actual scoring is the next thing to try.
+- Win prediction has **no skill** (52% accuracy, no better than the historical rate). Do not use it for betting.
+- Fantasy points are noisy, and a 7% edge over a simple rule does not mean you will win contests against smart players. Entry fees take a cut.
 
 ## How the backtest stays honest
 - For each test match, the model is trained **only on matches before that date** (a test checks this).
@@ -39,9 +66,10 @@ python -m pytest
 - `--ablate` adds features one step at a time so you can see which ones really help and which ones do nothing.
 
 ## Known weaknesses (read these)
-- **Impact player identity is taken from the real match** in the backtest, so that feature looks better there than it will in real use.
+- **Cricsheet does not say who the impact sub was**, only that 12 names are listed. The backtest guesses the sub and the replaced player from past matches, so impact results are rough.
 - **Credits are estimated** from form, not the real Dream11 credits.
 - **Pace/spin is guessed** from when a bowler bowls, because Cricsheet has no bowling style. Fix it with the CSV. Left/right-hand batting is not modelled (also not in Cricsheet).
+- Credits in `squads/example_ipl.json` are placeholders (8.5); put the real Dream11 credits in. That example is the last match in the data, so it is not a real prediction.
 - Not modelled: dew / time of day, weather, injuries, a bowler's death-over specialism beyond phase effects, exact bowling plans (a simple rotation is used unless you give `bowl_plan`), overthrows, Dream11 rule changes (edit `T20_RULES`).
 - `tests/synth.py` makes a **fake league with planted effects**. Tests on it prove the code finds real effects. They say **nothing** about how well it predicts real cricket. Only a backtest on real Cricsheet data does.
 - Fantasy points are very noisy. Do not stake money you cannot lose, and check that paid fantasy contests are legal where you live.

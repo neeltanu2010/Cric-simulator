@@ -91,8 +91,13 @@ def _parse_match(path: Path) -> tuple[list[dict], dict | None]:
     return rows, meta
 
 
+FULL_MEMBERS = {"India", "Australia", "England", "South Africa", "New Zealand", "Pakistan", "West Indies",
+                "Sri Lanka", "Bangladesh", "Afghanistan", "Ireland", "Zimbabwe"}
+
+
 def load_matches(folder: str | Path, limit: int | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load every ``*.json`` Cricsheet match in ``folder``. Returns (balls, matches)."""
+    """Load every ``*.json`` Cricsheet match in ``folder``. Returns (balls, matches).
+    The folder name (``ipl_json`` -> ``ipl``) becomes the ``league`` column."""
     files = sorted(Path(folder).glob("*.json"))
     if limit:
         files = files[:limit]
@@ -110,4 +115,25 @@ def load_matches(folder: str | Path, limit: int | None = None) -> tuple[pd.DataF
     matches = pd.DataFrame(metas)
     matches["date"] = pd.to_datetime(matches["date"])
     matches = matches.sort_values(["date", "match_id"]).reset_index(drop=True)
+    league = Path(folder).name.removesuffix("_json")
+    balls["league"] = league
+    matches["league"] = league
     return balls, matches
+
+
+def load_many(folders: list[str | Path], full_members_only: tuple[str, ...] = ("t20s",)):
+    """Load several Cricsheet folders into one pair of tables. For the big international folders
+    (default ``t20s``) keep only matches between the 12 Test-playing nations, because matches
+    between associate teams are a very different standard."""
+    bs, ms = [], []
+    for f in folders:
+        b, m = load_matches(f)
+        if m["league"].iloc[0] in full_members_only:
+            keep = m[m["team_a"].isin(FULL_MEMBERS) & m["team_b"].isin(FULL_MEMBERS)]["match_id"]
+            b, m = b[b["match_id"].isin(keep)], m[m["match_id"].isin(keep)]
+        bs.append(b)
+        ms.append(m)
+    balls = pd.concat(bs, ignore_index=True)
+    matches = pd.concat(ms, ignore_index=True).drop_duplicates("match_id")
+    balls = balls[balls["match_id"].isin(matches["match_id"])]
+    return balls, matches.sort_values(["date", "match_id"]).reset_index(drop=True)

@@ -5,3 +5,8 @@ __pycache__/
 # Cricsheet downloads are large; keep them local
 data/*
 !data/.gitkeep
+reports/*.log
+reports/experiments/log_*.txt
+reports/experiments/final_log.txt
+reports/player_diag.csv
+reports/tune*.log

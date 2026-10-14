@@ -26,7 +26,11 @@ from .players import PACE, SPIN, UNKNOWN
 OUTCOMES = ["0", "1", "2", "3", "4", "6", "W"]
 RUNS_OF = np.array([0, 1, 2, 3, 4, 6, 0])
 N_OUT = 7
-ALL_FEATURES = ("venue", "type", "innings", "state", "extras", "impact")
+ALL_FEATURES = ("lineup", "form", "venue", "type", "innings", "state", "extras", "impact", "league")
+
+# How a "good day" shifts the 7 outcomes (log-odds per unit): fewer dots and wickets, more runs.
+# Used for match-to-match variation in a batter's form, a bowler's form, and pitch/conditions.
+TILT = np.array([-0.35, 0.15, 0.15, 0.15, 0.6, 0.85, -0.7])
 
 
 def _outcome_index(runs_batter: np.ndarray, bowler_wicket: np.ndarray) -> np.ndarray:
@@ -49,10 +53,23 @@ class RateModel:
     # strength of the pull toward "no effect", in balls
     PRIOR = {"batter": 120, "bat_phase": 90, "bat_type": 100, "bowler": 150, "bowl_phase": 120,
              "venue": 1500, "venue_type": 1500, "venue_inn": 1500, "innings": 50,
-             "newbat": 50, "pos": 50, "pressure": 100}
+             "newbat": 50, "pos": 50, "pressure": 100, "league": 300}
 
-    def __init__(self, features=ALL_FEATURES, half_life_days: float | None = 730.0, rounds: int = 3):
+    def __init__(self, features=ALL_FEATURES, half_life_days: float | None = 730.0, rounds: int = 3,
+                 sigmas: tuple[float, float, float] = (0.25, 0.15, 0.12), prior_scale: float = 1.0,
+                 mean_preserving: bool = False):
+        """``sigmas`` = size of the day-to-day swing in (batter form, bowler form, pitch/conditions),
+        in log-odds. Needed because a player is not exactly his average in every match."""
         self.features = set(features)
+        self.sigmas = sigmas
+        self.prior_scale = prior_scale  # >1 pulls batter and bowler ratings harder toward the average
+        # Day-to-day swings are not neutral: a batter on a good day also stays in longer, so good days add
+        # more runs than bad days remove (+11 runs per first innings on real IPL 2025-26). With this flag
+        # on, the simulator finds the offset that cancels the drift before predicting. Off by default so the
+        # recorded experiments stay reproducible.
+        self.mean_preserving = mean_preserving
+        self.shift0 = 0.0  # offset subtracted from every swing (set by ``simulator.calibrate_swings``)
+        self._calibrated_for = None
         self.half_life_days = half_life_days
         self.rounds = rounds
         self.types: dict[str, int] = {}
@@ -112,7 +129,9 @@ class RateModel:
         bat_names = sorted(d["batter"].unique())
         bowl_names = sorted(d["bowler"].unique())
         venues = sorted(d["venue_key"].unique())
-        self.ids = {"bat": {x: i for i, x in enumerate(bat_names)},
+        leagues = sorted(d["league"].unique()) if "league" in d.columns else ["all"]
+        self.ids = {"league": {x: i for i, x in enumerate(leagues)},
+                    "bat": {x: i for i, x in enumerate(bat_names)},
                     "bowl": {x: i for i, x in enumerate(bowl_names)},
                     "venue": {x: i for i, x in enumerate(venues)}}
         bi = d["batter"].map(self.ids["bat"]).to_numpy()
@@ -121,6 +140,7 @@ class RateModel:
         inn = (d["innings"].to_numpy() - 1).clip(0, 1)
         nbat, nbowl, nven = len(bat_names), len(bowl_names), len(venues)
 
+        li = d["league"].map(self.ids["league"]).to_numpy() if "league" in d.columns else np.zeros(n, dtype=int)
         spec: dict[str, tuple[np.ndarray, int]] = {
             "batter": (bi, nbat), "bat_phase": (bi * 3 + ph, nbat * 3),
             "bowler": (wi, nbowl), "bowl_phase": (wi * 3 + ph, nbowl * 3),
@@ -131,6 +151,8 @@ class RateModel:
             spec["venue"] = (vi, nven)
             if use_type:
                 spec["venue_type"] = (vi * 3 + bt, nven * 3)
+        if self.has("league") and len(leagues) > 1:
+            spec["league"] = (li, len(leagues))
         if self.has("innings"):
             spec["innings"] = (inn, 2)
             if self.has("venue"):
@@ -148,7 +170,8 @@ class RateModel:
                 P = _softmax(base)
                 obs = np.stack([np.bincount(gid, weights=w * (O == o), minlength=G) for o in range(N_OUT)], axis=1)
                 exp = np.stack([np.bincount(gid, weights=w * P[:, o], minlength=G) for o in range(N_OUT)], axis=1)
-                prior = self.PRIOR[name] * share
+                k = self.prior_scale if name in ("batter", "bat_phase", "bat_type", "bowler", "bowl_phase") else 1.0
+                prior = self.PRIOR[name] * k * share
                 logT[name] = np.log((obs + prior) / (exp + prior))
                 tot = base + logT[name][gid]
         self.tables = {k: np.exp(v) for k, v in logT.items()}
@@ -215,7 +238,7 @@ class RateModel:
         return self.types.get(name, UNKNOWN) if self.has("type") else UNKNOWN
 
     def base_probs(self, batter: str, bowler: str, phase: int, venue: str | None, innings: int,
-                   pos: int) -> np.ndarray:
+                   pos: int, league: str | None = None) -> np.ndarray:
         """Outcome chances before the in-match effects (new batter, game situation)."""
         bt = self.bowl_type(bowler)
         logp = np.log(self.league[phase, bt])
@@ -233,6 +256,9 @@ class RateModel:
                 logp = logp + np.log(T["venue"][vi])
             if "venue_type" in T:
                 logp = logp + np.log(T["venue_type"][vi * 3 + bt])
+        li = ids["league"].get(league) if league else None
+        if li is not None and "league" in T:
+            logp = logp + np.log(T["league"][li])
         if "innings" in T:
             logp = logp + np.log(T["innings"][innings - 1])
             if vi is not None and "venue_inn" in T:
