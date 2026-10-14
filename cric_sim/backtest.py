@@ -221,6 +221,8 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
         form_vec = np.array([form.get(n, role_mean.get(roles.get(n, "BAT"), glob)) for n in names])
         sp = spearmanr(mean[played], actual[played])[0] if played.sum() > 3 else np.nan
         sp_form = spearmanr(form_vec[played], actual[played])[0] if played.sum() > 3 else np.nan
+        p10_, p90_ = np.percentile(sim["points"], [10, 90], axis=0)
+        p10, p90 = p10_, p90_
         if collect is not None:
             real_pos = ms_stats["pos"] if "pos" in ms_stats.columns else None
             ap = points_parts(ms_stats.reset_index(), roles).set_index(ms_stats.index)
@@ -249,8 +251,6 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
                     "hist_pos": float(hist.get(p_.name, {}).get("pos", np.nan)),
                 })
         top = lambda v: set(np.argsort(-v)[:5])
-        p10_, p90_ = np.percentile(sim["points"], [10, 90], axis=0)
-        p10, p90 = p10_, p90_
 
         best = pick_team(plist, sim["points"])
         form_pick = pick_team(plist, form_vec[None, :])

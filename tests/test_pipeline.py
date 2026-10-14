@@ -248,7 +248,9 @@ def test_backtest_uses_only_the_past(world, monkeypatch):
     monkeypatch.setattr(RateModel, "fit", spy)
     bf, st = prepare(world["balls"], world["matches"])
     cfg = BTConfig(n_test=5, sims=100, refit_every=1, types_override=TYPES, random_draws=2)
-    df = run_backtest(bf, world["matches"], st, cfg)
+    rows = []
+    df = run_backtest(bf, world["matches"], st, cfg, collect=rows)
+    assert rows and {"pred_bat", "act_bat", "plan_pos", "real_pos"} <= set(rows[0])
     assert len(df) == len(seen) == 5
     for fit_last_date, match_date in zip(seen, df["date"]):
         assert fit_last_date < match_date  # never trained on the match day or later
