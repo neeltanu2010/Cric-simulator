@@ -25,8 +25,10 @@ def phase_of_over(over: int) -> int:
 
 
 def venue_key(venue: str | None) -> str:
-    """'Wankhede Stadium, Mumbai' and 'Wankhede Stadium' are the same ground."""
-    return (venue or "unknown").split(",")[0].strip()
+    """'Wankhede Stadium, Mumbai' and 'Wankhede Stadium' are the same ground, and so are
+    'M.Chinnaswamy Stadium' and 'M Chinnaswamy Stadium'."""
+    name = (venue or "unknown").split(",")[0].replace(".", " ")
+    return " ".join(name.split())
 
 
 def _parse_match(path: Path) -> tuple[list[dict], dict | None]:

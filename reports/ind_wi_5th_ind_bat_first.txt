@@ -1,0 +1,44 @@
+Setting: configs/best.json  (simulator share 50% of the team pick)
+
+Ground: M Chinnaswamy Stadium  (25293 balls of data)  runs/over vs league +0.37, wicket rate x1.04, chasing side won 58% of 113 matches
+
+India (bats first) avg 230  win 55%   |   West Indies avg 194  win 44%
+
+Player                Role     Cr    Avg   P10   P90
+Abhishek Sharma       BAT     9.5   96.3     5   258
+SV Samson             WK      8.0   87.9     6   242
+RL Chase              AR     10.0   71.6    11   150
+SD Hope               WK      9.0   68.3     6   167
+Ishan Kishan          WK     11.0   68.3     5   173
+J Andrew              BAT     7.5   67.2     5   178
+Nithish Kumar Reddy   BAT     8.5   64.2     6   138
+SO Hetmyer            BAT     7.5   63.3     4   166
+Naman Dhir            BAT     7.5   62.4     5   164
+AR Patel              AR      9.0   61.4     8   125
+SS Iyer               BAT    10.5   60.9     5   152
+KMA Paul              BOWL    7.0   57.1     5   126
+Arshdeep Singh        BOWL    7.5   54.4     6   110
+R Powell              BAT     7.0   51.7     4   141
+Prince Yadav          BOWL    7.0   50.6     5   105
+R Shepherd            BOWL    7.0   50.4     3   111
+S Joseph              BOWL   10.5   50.3     5   103
+G Motie               BOWL    9.5   49.5     4   106
+MP Yadav              BOWL    7.0   48.6     5   102
+SK Springer           BOWL    7.0   42.9     2    94
+SE Rutherford         BAT     8.5   41.9     4   118
+Tilak Varma           BAT     8.0   38.2     4   100
+
+Value used to pick the team = 50% simulator + 50% recent form
+
+Best XI (100.0 credits, expected 834 pts)
+  Abhishek Sharma       BAT   India (C)
+  SV Samson             WK    India (VC)
+  Ishan Kishan          WK    India
+  Nithish Kumar Reddy   BAT   India
+  AR Patel              AR    India
+  Arshdeep Singh        BOWL  India
+  SD Hope               WK    West Indies
+  SO Hetmyer            BAT   West Indies
+  RL Chase              AR    West Indies
+  G Motie               BOWL  West Indies
+  S Joseph              BOWL  West Indies

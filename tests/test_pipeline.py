@@ -394,6 +394,9 @@ def test_squad_builder_matches_app_style_names(world):
     assert match_player("Sai Sudharsan", names, names)[0] == "B Sai Sudharsan"
     assert match_player("Mohd Siraj", names, names)[0] == "Mohammed Siraj"
     assert match_team("RCB", ["Royal Challengers Bangalore", "Royal Challengers Bengaluru"]) == "Royal Challengers Bengaluru"
+    assert match_team("India", ["India", "Mumbai Indians", "West Indies"]) == "India"
+    assert match_team("India", ["Mumbai Indians", "India"]) == "India"
+    assert match_team("West Indies", ["Mumbai Indians", "West Indies", "India"]) == "West Indies"
     bf, st = prepare(world["balls"], world["matches"])
     xi = lambda t: [f"T{t}_P{k}" for k in range(11)]
     squad, notes = build_squad(st, world["matches"], "Team0", xi(0), "Team1", xi(1), "High Grnd", sub_b="T1_P12")

@@ -1,0 +1,45 @@
+Setting: configs/best.json  (simulator share 50% of the team pick)
+
+Ground: Rajiv Gandhi International Stadium  (21105 balls of data)  runs/over vs league +0.14, wicket rate x0.98, chasing side won 56% of 93 matches
+Pitch report used: scoring = high, spin = normal, pace = normal
+
+West Indies (bats first) avg 208  win 31%   |   India avg 195  win 68%
+
+Player                Role     Cr    Avg   P10   P90
+Abhishek Sharma       BAT     9.5   89.8     6   228
+SV Samson             WK      8.0   85.0     7   217
+J Andrew              BAT     7.5   74.3     5   198
+SD Hope               WK      9.0   72.2     6   180
+RL Chase              AR     10.0   70.1     9   148
+SO Hetmyer            BAT     7.5   66.3     4   173
+Ishan Kishan          WK     11.0   59.5     4   151
+Nithish Kumar Reddy   BAT     8.5   55.7     5   118
+R Powell              BAT     7.0   54.7     4   149
+Naman Dhir            BAT     7.5   53.0     4   140
+AR Patel              AR      9.0   52.7     8   108
+Arshdeep Singh        BOWL    7.5   51.1     6   105
+KMA Paul              BOWL    7.0   50.0     5   116
+Prince Yadav          BOWL    7.0   50.0     6   103
+SS Iyer               BAT    10.5   48.0     4   124
+MP Yadav              BOWL    7.0   44.2     5    92
+S Joseph              BOWL   10.5   43.7     3    98
+G Motie               BOWL    9.5   42.1     2    94
+SE Rutherford         BAT     8.5   41.8     4   116
+R Shepherd            BOWL    7.0   37.9     3    92
+SK Springer           BOWL    7.0   31.3     2    75
+Tilak Varma           BAT     8.0   28.1     4    78
+
+Value used to pick the team = 50% simulator + 50% recent form
+
+Best XI (99.0 credits, expected 813 pts)
+  J Andrew              BAT   West Indies
+  SD Hope               WK    West Indies
+  SO Hetmyer            BAT   West Indies
+  RL Chase              AR    West Indies
+  G Motie               BOWL  West Indies
+  S Joseph              BOWL  West Indies
+  Abhishek Sharma       BAT   India (C)
+  SV Samson             WK    India (VC)
+  Ishan Kishan          WK    India
+  AR Patel              AR    India
+  Arshdeep Singh        BOWL  India

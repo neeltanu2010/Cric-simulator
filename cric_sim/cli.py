@@ -132,7 +132,8 @@ def cmd_squad(a):
     nums = lambda x: [float(v) for v in split(x)] or None
     squad, notes = build_squad(st, matches, a.team_a, split(a.xi_a), a.team_b, split(a.xi_b), a.venue, a.sub_a, a.sub_b,
                                nums(a.credits_a), nums(a.credits_b),
-                               {"scoring": a.pitch_scoring, "spin": a.pitch_spin, "pace": a.pitch_pace})
+                               {"scoring": a.pitch_scoring, "spin": a.pitch_spin, "pace": a.pitch_pace},
+                               keepers=split(a.keepers))
     print("\n".join(notes))
     write_squad(squad, a.out)
     print(f"\nWrote {a.out} (team A = {squad['team_a']['name']} bats first). Check the matches above, then run:\n"
@@ -200,6 +201,7 @@ def main(argv=None):
             sp.add_argument("--pitch-scoring", default="normal")
             sp.add_argument("--pitch-spin", default="normal")
             sp.add_argument("--pitch-pace", default="normal")
+            sp.add_argument("--keepers", default=None, help="players Dream11 lists as wicket-keepers, comma separated")
             sp.add_argument("--out", default="squads/match.json")
         if name == "types":
             sp.add_argument("--out", default="data/players.csv")

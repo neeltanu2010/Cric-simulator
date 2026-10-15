@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .lineup import history_table, infer_roles, order_by_position, pick_bowlers
+from .lineup import estimate_credits, form_points, history_table, infer_roles, order_by_position, pick_bowlers
 
 TEAM_ALIASES = {
     "mi": "Mumbai Indians", "csk": "Chennai Super Kings", "rcb": "Royal Challengers", "kkr": "Kolkata Knight Riders",
@@ -25,11 +25,16 @@ def _norm(x: str) -> str:
 
 
 def match_team(raw: str, teams: list[str]) -> str:
-    """Latest full team name for an abbreviation or partial name ("RCB" -> "Royal Challengers Bengaluru")."""
-    key = TEAM_ALIASES.get(raw.strip().lower(), raw)
-    hits = [t for t in teams if _norm(key) in _norm(t)]
-    if hits:
-        return hits[-1]  # ``teams`` is in date order: the newest name wins (Bangalore -> Bengaluru)
+    """Latest full team name for an exact name, an abbreviation or part of a name
+    ("India" -> "India", never "Mumbai Indians"; "RCB" -> "Royal Challengers Bengaluru")."""
+    n = _norm(raw)
+    for key in (n, _norm(TEAM_ALIASES.get(n.replace(" ", ""), raw))):
+        exact = [t for t in teams if _norm(t) == key]
+        if exact:
+            return exact[-1]
+        words = [t for t in teams if re.search(rf"\b{re.escape(key)}\b", _norm(t))]
+        if words:
+            return words[-1]  # ``teams`` is in date order: the newest name wins (Bangalore -> Bengaluru)
     best = difflib.get_close_matches(raw, teams, n=1, cutoff=0.3)
     if not best:
         raise ValueError(f"team '{raw}' not found in the data")
@@ -71,7 +76,8 @@ def match_player(raw: str, team_names: list[str], all_names: list[str]) -> tuple
 def build_squad(stats: pd.DataFrame, matches: pd.DataFrame, team_a: str, xi_a: list[str], team_b: str, xi_b: list[str],
                 venue: str | None = None, sub_a: str | None = None, sub_b: str | None = None,
                 credits_a: list[float] | None = None, credits_b: list[float] | None = None,
-                pitch: dict | None = None) -> tuple[dict, list[str]]:
+                pitch: dict | None = None, keepers: list[str] | None = None,
+                estimate: bool = True) -> tuple[dict, list[str]]:
     """Team A bats first. Returns (squad dict, lines describing every name match)."""
     teams_in_order = list(dict.fromkeys(pd.concat([matches["team_a"], matches["team_b"]]).iloc[matches.index.argsort()]))
     all_names = sorted(stats["name"].unique())
@@ -99,7 +105,7 @@ def build_squad(stats: pd.DataFrame, matches: pd.DataFrame, team_a: str, xi_a: l
         if len(names) != 11:
             raise ValueError(f"{tname}: need exactly 11 players, got {len(names)}")
         cr = {n: float(c) for n, c in zip(names, credits)} if credits and len(credits) == 11 else {}
-        if not cr:
+        if not cr and (credits_a or credits_b):
             notes.append(f"  {tname}: no credits given, using 8.5 for everyone - type the real Dream11 credits in")
         order = order_by_position(names, hist, roles)
         bowls = set(pick_bowlers(order, hist, roles, k=7))
@@ -117,6 +123,27 @@ def build_squad(stats: pd.DataFrame, matches: pd.DataFrame, team_a: str, xi_a: l
             team["impact"] = {"name": sn, "role": roles.get(sn, "BAT"), "credits": 7.5, "replaces": rep, "p_used": 0.8}
             notes.append(f"  (guess) {sn} replaces {rep}; edit 'replaces' and 'p_used' if you know better")
         out[slot] = team
+    # Dream11 fixes who counts as a wicket-keeper; let the user say so
+    for raw in keepers or []:
+        for slot in ("team_a", "team_b"):
+            tn = sorted(recent.loc[recent["team"] == out[slot]["name"], "name"].unique())
+            k, _ = match_player(raw.strip(), tn, all_names)
+            for p in out[slot]["players"]:
+                if p["name"] == k:
+                    p["role"] = "WK"
+                    notes.append(f"keeper: {raw.strip()} -> {k} marked WK")
+    # no credits typed in: estimate them from recent form so the 100-credit budget still bites
+    if estimate and not credits_a and not credits_b:
+        names = [p["name"] for s_ in ("team_a", "team_b") for p in out[s_]["players"]]
+        names += [out[s_]["impact"]["name"] for s_ in ("team_a", "team_b") if out[s_].get("impact")]
+        form, role_mean, glob = form_points(stats, roles)
+        cr = estimate_credits(names, roles, form, role_mean, glob)
+        for s_ in ("team_a", "team_b"):
+            for p in out[s_]["players"]:
+                p["credits"] = cr[p["name"]]
+            if out[s_].get("impact"):
+                out[s_]["impact"]["credits"] = cr[out[s_]["impact"]["name"]]
+        notes.append("credits: ESTIMATED from recent form (7 to 11). Replace them with the real Dream11 credits if you have them.")
     return out, notes
 
 

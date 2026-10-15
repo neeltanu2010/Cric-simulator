@@ -1,0 +1,44 @@
+Setting: configs/best.json  (simulator share 50% of the team pick)
+
+Ground: M Chinnaswamy Stadium  (25293 balls of data)  runs/over vs league +0.37, wicket rate x1.04, chasing side won 58% of 113 matches
+
+West Indies (bats first) avg 207  win 33%   |   India avg 192  win 66%
+
+Player                Role     Cr    Avg   P10   P90
+Abhishek Sharma       BAT     9.5   85.7     6   226
+SV Samson             WK      8.0   77.6     6   194
+RL Chase              AR     10.0   73.9    10   154
+J Andrew              BAT     7.5   71.0     5   190
+SD Hope               WK      9.0   70.5     5   176
+SO Hetmyer            BAT     7.5   67.7     4   179
+AR Patel              AR      9.0   60.3    10   119
+Ishan Kishan          WK     11.0   59.7     4   154
+Nithish Kumar Reddy   BAT     8.5   59.2     7   124
+R Powell              BAT     7.0   56.0     4   148
+Arshdeep Singh        BOWL    7.5   55.4     8   110
+KMA Paul              BOWL    7.0   53.3     5   121
+Prince Yadav          BOWL    7.0   53.0     8   106
+Naman Dhir            BAT     7.5   52.2     4   135
+SS Iyer               BAT    10.5   47.8     4   127
+S Joseph              BOWL   10.5   47.3     3   102
+G Motie               BOWL    9.5   47.2     4   105
+MP Yadav              BOWL    7.0   47.0     6    98
+SE Rutherford         BAT     8.5   44.7     4   123
+R Shepherd            BOWL    7.0   40.8     4    96
+SK Springer           BOWL    7.0   32.3     2    77
+Tilak Varma           BAT     8.0   31.2     4    86
+
+Value used to pick the team = 50% simulator + 50% recent form
+
+Best XI (99.0 credits, expected 814 pts)
+  J Andrew              BAT   West Indies
+  SD Hope               WK    West Indies
+  SO Hetmyer            BAT   West Indies
+  RL Chase              AR    West Indies
+  G Motie               BOWL  West Indies
+  S Joseph              BOWL  West Indies
+  Abhishek Sharma       BAT   India (C)
+  SV Samson             WK    India (VC)
+  Ishan Kishan          WK    India
+  AR Patel              AR    India
+  Arshdeep Singh        BOWL  India
