@@ -34,13 +34,17 @@ G Motie               BOWL    8.5    43.5    3   96   47.0       45.3
 Pick value = 50% simulator + 50% recent form
 
 Captain candidates (captain = highest simulator average; tested best on 2022-26 backtests)
-  Player                 Sim avg  Top scorer   Top 3
-  Abhishek Sharma           95.0         15%     29%
-  SV Samson                 80.4         11%     24%
-  SD Hope                   71.7          8%     20%
-  J Andrew                  67.9          8%     19%
-  SO Hetmyer                66.8          7%     19%
-  Ishan Kishan              66.3          7%     19%
+  Player                 Sim avg  Top scorer   Top 2   Top 3
+  Abhishek Sharma           95.0         15%     23%     29%
+  SV Samson                 80.4         11%     19%     24%
+  SD Hope                   71.7          8%     14%     20%
+  J Andrew                  67.9          8%     14%     19%
+  SO Hetmyer                66.8          7%     14%     19%
+  Ishan Kishan              66.3          7%     13%     19%
+  Nithish Kumar Reddy       64.8          4%     10%     15%
+  RL Chase                  60.9          3%      8%     13%
+  AR Patel                  60.7          3%      7%     12%
+  R Powell                  58.3          5%     11%     16%
 
 Best XI (99.0 credits, expected 799 pts)
   SV Samson             WK    India (VC)

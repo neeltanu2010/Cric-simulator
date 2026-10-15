@@ -140,11 +140,13 @@ def cmd_predict(a):
                               pts.std(axis=0), n=a.teams, spread=spread, seed=a.seed)
     P = pts
     p_top1 = np.bincount(P.argmax(axis=1), minlength=P.shape[1]) / P.shape[0]
-    p_top3 = np.bincount(np.argsort(-P, axis=1)[:, :3].ravel(), minlength=P.shape[1]) / P.shape[0]
+    rank = np.argsort(-P, axis=1)
+    p_top2 = np.bincount(rank[:, :2].ravel(), minlength=P.shape[1]) / P.shape[0]  # a perfect captain or vice-captain
+    p_top3 = np.bincount(rank[:, :3].ravel(), minlength=P.shape[1]) / P.shape[0]
     print("\nCaptain candidates (captain = highest simulator average; tested best on 2022-26 backtests)")
-    print(f"  {'Player':<22}{'Sim avg':>8}{'Top scorer':>12}{'Top 3':>8}")
-    for i in np.argsort(-P.mean(axis=0))[:6]:
-        print(f"  {players[i].name:<22}{P[:, i].mean():>8.1f}{p_top1[i]:>12.0%}{p_top3[i]:>8.0%}")
+    print(f"  {'Player':<22}{'Sim avg':>8}{'Top scorer':>12}{'Top 2':>8}{'Top 3':>8}")
+    for i in np.argsort(-P.mean(axis=0))[:10]:
+        print(f"  {players[i].name:<22}{P[:, i].mean():>8.1f}{p_top1[i]:>12.0%}{p_top2[i]:>8.0%}{p_top3[i]:>8.0%}")
     if a.teams > 1:
         print(f"\n{len(teams)} different teams (team 1 = the best single pick; the others each suit a different version "
               f"of the match; spread {spread})")
