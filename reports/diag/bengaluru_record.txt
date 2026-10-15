@@ -1,0 +1,46 @@
+
+=== THE TEAM ===
+             player role  games here avg pts here  avg pts all T20s  diff games with 70+ pts here last game here
+          SV Samson   WK           8         54.8              55.8  -1.0                       2       Apr 2026
+    Abhishek Sharma  BAT           2         42.5              64.8 -22.3                       0       Mar 2026
+       Ishan Kishan   WK           5         52.2              60.2  -8.0                       1       Mar 2026
+            SS Iyer  BAT           9         54.3              54.9  -0.6                       4       Apr 2025
+Nithish Kumar Reddy   AR           2         11.0              53.0 -42.0                       0       Mar 2026
+     Arshdeep Singh BOWL           3         43.7              50.9  -7.2                       0       Apr 2025
+            SD Hope   WK           1         57.0              49.6   7.4                       0       May 2024
+           J Andrew   WK           0            -              53.0     -       never played here              -
+         SO Hetmyer  BAT           4         56.5              40.1  16.4                       1       Apr 2025
+            G Motie BOWL           0            -              48.5     -       never played here              -
+           S Joseph BOWL           0            -              58.9     -       never played here              -
+             player             batting here      bowling here             best game here
+          SV Samson 186 runs, avg 31, SR 166                 -    178 pts (92r, 2018 IPL)
+    Abhishek Sharma  41 runs, avg 20, SR 137 0 wkts, econ 10.0     68 pts (34r, 2024 IPL)
+       Ishan Kishan 121 runs, avg 24, SR 173                 -    160 pts (80r, 2026 IPL)
+            SS Iyer 243 runs, avg 35, SR 133                 -    133 pts (67r, 2019 IPL)
+Nithish Kumar Reddy     1 runs, avg 1, SR 17  0 wkts, econ 9.5      12 pts (0r, 2024 IPL)
+     Arshdeep Singh    2 runs, avg 2, SR 100 4 wkts, econ 10.0 62 pts (2r, 2w, 2023 T20S)
+            SD Hope  29 runs, avg 29, SR 126                 -     57 pts (29r, 2024 IPL)
+           J Andrew                        -                 -                          -
+         SO Hetmyer  94 runs, avg 24, SR 134                 -    159 pts (75r, 2019 IPL)
+            G Motie                        -                 -                          -
+           S Joseph                        -                 -                          -
+
+=== BACKUPS / CLOSE CALLS ===
+       player role  games here avg pts here  avg pts all T20s   diff games with 70+ pts here last game here
+ Prince Yadav BOWL           1         97.0              44.8   52.2                       1       Apr 2026
+     RL Chase   AR           0            -              53.8      -       never played here              -
+SE Rutherford  BAT           1         64.0              42.1   21.9                       0       Apr 2025
+     KMA Paul   AR           0            -              43.6      -       never played here              -
+  Tilak Varma  BAT           1        170.0              60.8  109.2                       1       Apr 2023
+     AR Patel   AR          13         75.6              57.2   18.4                       6       Apr 2026
+       player             batting here      bowling here              best game here
+ Prince Yadav                        - 3 wkts, econ 10.7   97 pts (0r, 3w, 2026 IPL)
+     RL Chase                        -                 -                           -
+SE Rutherford  30 runs, avg 30, SR 167                 -      64 pts (30r, 2025 IPL)
+     KMA Paul                        -                 -                           -
+  Tilak Varma  84 runs, avg 84, SR 183                 -     170 pts (84r, 2023 IPL)
+     AR Patel 249 runs, avg 31, SR 158 12 wkts, econ 7.7 184 pts (38r, 3w, 2017 IPL)
+
+=== THE GROUND: average first-innings total since 2023 ===
+IPL: 195 here (23 games) vs 190 at other grounds (265 games)
+T20S: 160 here (1 games) vs 172 at other grounds (268 games)

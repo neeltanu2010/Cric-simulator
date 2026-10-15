@@ -351,6 +351,17 @@ def _mini_match(path, date, match_number, with_sub=False):
     path.write_text(json.dumps(m))
 
 
+def test_match_in_two_folders_is_counted_once(tmp_path):
+    from cric_sim.loader import load_many
+    wc, t20s = tmp_path / "wc_json", tmp_path / "t20s_json"
+    wc.mkdir(), t20s.mkdir()
+    _mini_match(wc / "7.json", "2024-06-01", 1)
+    _mini_match(t20s / "7.json", "2024-06-01", 1)  # the same World Cup game, also in the all-T20Is download
+    balls, matches = load_many([wc, t20s], full_members_only=())
+    assert len(matches) == 1 and len(balls) == 12 and set(balls["league"]) == {"wc"}
+    assert balls.groupby("batter")["runs_batter"].sum()["A"] == 6  # not doubled
+
+
 def test_substitutions_on_deliveries_and_afternoon_games(tmp_path):
     _mini_match(tmp_path / "1.json", "2024-04-06", 19, with_sub=True)
     _mini_match(tmp_path / "2.json", "2024-04-06", 20)

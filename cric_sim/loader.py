@@ -156,6 +156,8 @@ def load_many(folders: list[str | Path], full_members_only: tuple[str, ...] = ("
         bs.append(b)
         ms.append(m)
     balls = pd.concat(bs, ignore_index=True)
+    # a match can sit in two folders (every World Cup game is also in t20s): keep one copy, from the first folder
     matches = pd.concat(ms, ignore_index=True).drop_duplicates("match_id")
-    balls = balls[balls["match_id"].isin(matches["match_id"])]
+    kept = pd.MultiIndex.from_frame(matches[["match_id", "league"]])
+    balls = balls[pd.MultiIndex.from_frame(balls[["match_id", "league"]]).isin(kept)]
     return balls, matches.sort_values(["date", "match_id"]).reset_index(drop=True)
