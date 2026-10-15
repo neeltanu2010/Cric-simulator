@@ -30,5 +30,7 @@
   "note": "all effects, 50% mix, form decay 0.9, generic lineup noise"
  },
  "captain_by": "simulator",
- "captain_note": "C/VC chosen by simulator average (team still picked by 50/50 value): IPL 2022-24 +1.6 pts/match, IPL 2025-26 +5.0"
+ "captain_note": "C/VC chosen by simulator average (team still picked by 50/50 value): IPL 2022-24 +1.6 pts/match, IPL 2025-26 +5.0",
+ "multi_team_spread": 0.3,
+ "multi_team_note": "best of N teams vs best possible, IPL 2025-26: 1 team 65.9%, 3 teams 71.8%, 6 teams 74.7%, 11 teams 76.9%, 20 teams 78.9%"
 }

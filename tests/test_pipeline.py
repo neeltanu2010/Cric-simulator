@@ -478,3 +478,16 @@ def test_team_limit_is_ten_per_side():
     assert sum(p.team == "A" for p in t["team"]) == 10  # Dream11 allows 10, not 11
     t7 = pick_team(players, value[None, :], max_per_team=7)
     assert sum(p.team == "A" for p in t7["team"]) == 7
+
+
+def test_diverse_teams_are_valid_distinct_and_start_with_the_best_pick(world):
+    from cric_sim.multi import diverse_teams
+    sim = simulate(world["model"], make_team(0), make_team(1), 600, 5, "Plain Ground")
+    pl, pts = sim["players"], sim["points"]
+    teams = diverse_teams(pl, pts.mean(axis=0), pts.mean(axis=0), pts.std(axis=0), n=6, spread=0.3, seed=1)
+    main = pick_team(pl, pts.mean(axis=0)[None, :])
+    assert {p.name for p in teams[0]["team"]} == {p.name for p in main["team"]}
+    keys = {(frozenset(p.name for p in t["team"]), t["captain"].name, t["vice_captain"].name) for t in teams}
+    assert len(keys) == len(teams) >= 4
+    for t in teams:
+        assert len(t["team"]) == 11 and t["credits"] <= 100 and t["captain"] in t["team"]

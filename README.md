@@ -145,6 +145,32 @@ Re-scored with these rules (same predictions, teams re-picked):
 With realistic credit bands the budget bites harder; our team loses a few points but the form rule loses much more, so the
 gap grows (+45 and +62 points a match, from +30 and +39). The 10-per-team limit changes almost nothing.
 
+## Getting closer to the best possible team
+Ideas tested (chosen on IPL 2022-24 with 2018-21 for training, checked on 2025-26, Dream11 rules):
+
+| Idea | Result | Kept? |
+|---|---|---|
+| Keeper takes his real share of catches (15.7%, not 9.1%); bowler caught-and-bowled 4.2% | keeper bias -3.8 -> -2.1 pts, team -4.5 (within noise) | Option only |
+| Batting order / bowling usage from recent matches for the same team | positions better predicted (error 0.80 -> 0.72), team -4.4 (within noise) | Option only |
+| Both together | team -14.4 (95% -24 to -5) | No |
+| Different simulator/form mix per role | best on 2018-21, -7.4 on 2022-24 | No |
+| Extra points per role (e.g. bowlers, keepers) | no consistent gain | No |
+| **Several different teams** (`predict --teams N`) | best of N gets much closer (below) | **Yes** |
+
+**Several teams.** Team 1 is the normal pick; each extra team is built for a different plausible version of the match
+(each player's value redrawn from his predicted spread, spread 0.3). IPL 2025-26 (148 matches):
+
+| Teams entered | Best of them | % of best possible | Average team |
+|---:|---:|---:|---:|
+| 1 | 753 | 65.9% | 753 |
+| 3 | 821 | 71.8% | 728 |
+| 6 | 854 | 74.7% | 717 |
+| 11 | 879 | 76.9% | 709 |
+| 20 | 902 | 78.9% | 705 |
+
+The best team in the set gets much closer to the best possible team, but the average team is lower and every team
+costs an entry fee. A single team stays at ~66%: the rest of the gap is the randomness of one match.
+
 ## How the backtest stays honest
 - For each test match, the model is trained **only on matches before that date** (a test checks this).
 - Batting order, bowlers, roles and credits are worked out from past matches only.

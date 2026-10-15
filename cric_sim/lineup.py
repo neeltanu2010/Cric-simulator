@@ -104,15 +104,21 @@ def phase_overs_table(balls_f: pd.DataFrame) -> pd.DataFrame:
     return t.reset_index().rename(columns={"bowler": "name"})
 
 
-def lineup_history(stats: pd.DataFrame, bph: pd.DataFrame, names: list[str], n_pos: int = 10, n_overs: int = 15):
+def lineup_history(stats: pd.DataFrame, bph: pd.DataFrame, names: list[str], n_pos: int = 10, n_overs: int = 15,
+                   team_of: dict[str, str] | None = None, same_team_pos: int = 5, same_team_overs: int = 10):
     """Recent real batting positions and usual overs per phase, for the realistic-lineup simulator.
-    ``stats`` must only hold matches before the one being predicted."""
+    ``stats`` must only hold matches before the one being predicted. With ``team_of`` (player -> team), a
+    player's recent matches FOR THIS TEAM are used when there are enough of them: a batter can open for his
+    league side but bat at six for his country."""
     ps = stats[stats["name"].isin(names)].sort_values("date")
-    pos_hist = {n: g["pos"].dropna().tail(n_pos).tolist() for n, g in ps.groupby("name")}
-    phase_ov = {}
+    pos_hist, phase_ov = {}, {}
     known = set(bph["match_id"])  # scorecard-only matches have no phase split: leave them out here
     for n, g in ps.groupby("name"):
-        mids = g.loc[g["match_id"].isin(known), "match_id"].tail(n_overs)
+        same = g[g["team"] == team_of[n]] if team_of and n in team_of else g.iloc[0:0]
+        sp = same["pos"].dropna()
+        pos_hist[n] = sp.tail(same_team_pos).tolist() if len(sp) >= 2 else g["pos"].dropna().tail(n_pos).tolist()
+        sm = same.loc[same["match_id"].isin(known), "match_id"].tail(same_team_overs)
+        mids = sm if len(sm) >= 3 else g.loc[g["match_id"].isin(known), "match_id"].tail(n_overs)
         b = bph[(bph["name"] == n) & bph["match_id"].isin(mids)]
         if len(mids):
             phase_ov[n] = tuple(b[[0, 1, 2]].sum().to_numpy() / len(mids))

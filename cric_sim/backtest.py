@@ -33,7 +33,7 @@ from .lineup import (estimate_credits, form_points, history_table, infer_roles, 
 from .model import ALL_FEATURES, RateModel
 from .optimizer import pick_team
 from .players import bowl_types, load_player_csv
-from .simulator import Impact, Player, Team, simulate
+from .simulator import REAL_CATCH_SHARES, Impact, Player, Team, simulate
 
 BLENDS = (0.1, 0.25, 0.5, 0.75, 0.9)  # share of the simulator in a simulator/form mix
 
@@ -75,6 +75,8 @@ class BTConfig:
     recent_pitch: bool = False  # adjust for how the ground has played in the last ``recent_days``
     recent_days: int = 60
     recent_S: float = 1500.0
+    keeper_catches: bool = False  # keeper / bowler take their real share of catches; keeper = most stumpings
+    team_lineups: bool = False  # batting positions and bowling usage from recent matches for the same team
     captain_by: str = "value"  # "simulator": captain / vice-captain chosen by the simulator's average
     recent_league_n: int = 0  # >0: adjust for how the league scored in its last N matches (scoring-level drift)
     recent_league_S: float = 4000.0
@@ -230,9 +232,14 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
                                 "bowl" if team_name == r.team_a else "bat", imp[1], 1.0)
             pos_hist = phase_ov = None
             if cfg.empirical_lineup:
-                pos_hist, phase_ov = lineup_history(past_s, bph, order + ([imp[0]] if imp else []))
+                pool_ = order + ([imp[0]] if imp else [])
+                pos_hist, phase_ov = lineup_history(past_s, bph, pool_, team_of={n: team_name for n in pool_} if cfg.team_lineups else None)
+            keeper = None
+            if cfg.keeper_catches:  # the gloveman: the XI player with the most stumpings so far
+                stp = {n: hist.get(n, {}).get("stumpings", 0) for n in order}
+                keeper = max(stp, key=stp.get) if max(stp.values()) >= 1 else None
             built.append(Team(team_name, [players[n] for n in order], [players[n] for n in bowl_names], impact,
-                              bowl_weights=bowl_w, pos_hist=pos_hist, phase_overs=phase_ov))
+                              bowl_weights=bowl_w, pos_hist=pos_hist, phase_overs=phase_ov, keeper=keeper))
         ta, tb = built
 
         adj = None
@@ -247,7 +254,8 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
                 lg = model.recent_pitch(rec, cfg.recent_league_S)
                 adj = lg if adj is None else adj * lg
         sim = simulate(model, ta, tb, n_sims=cfg.sims, seed=int(rng.integers(1 << 31)), venue=r.venue_key, league=r.league,
-                       afternoon=bool(getattr(r, "afternoon", False)), pitch_adj=adj)
+                       afternoon=bool(getattr(r, "afternoon", False)), pitch_adj=adj,
+                       catch_shares=REAL_CATCH_SHARES if cfg.keeper_catches else None)
         plist = sim["players"]
         names = [p.name for p in plist]
         idx_of = {n: i for i, n in enumerate(names)}

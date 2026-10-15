@@ -52,6 +52,7 @@ class Team:
     bowl_weights: list[float] | None = None  # how likely each bowler is to bowl (e.g. usual overs per match)
     pos_hist: dict[str, list[float]] | None = None  # recent real batting positions (0 = opener) per player
     phase_overs: dict[str, tuple[float, float, float]] | None = None  # usual overs per match in PP / middle / death
+    keeper: str | None = None  # who keeps wicket (default: first WK in the batting order)
 
     def __post_init__(self):
         if len(self.batting_order) != 11:
@@ -175,7 +176,8 @@ def _lineups(team: Team, uses_impact: bool, batting_first: bool):
 def _innings(model: RateModel, venue: str | None, inn: int, bat: list, bowl: list, field: list,
              keeper: int, plan: np.ndarray, order: np.ndarray, n: int, rng: np.random.Generator, target,
              n_roster: tuple[int, int], league: str | None = None, cond: np.ndarray | None = None,
-             afternoon: bool = False, pitch_adj: np.ndarray | None = None, pitch_report: dict | None = None):
+             afternoon: bool = False, pitch_adj: np.ndarray | None = None, pitch_report: dict | None = None,
+             catch_shares: tuple[float, float] | None = None):
     nb = len(bat)
     nbowl = len(bowl)
     bat_slot = np.array([s for s, _ in bat])
@@ -285,6 +287,16 @@ def _innings(model: RateModel, venue: str | None, inn: int, bat: list, bowl: lis
                 m = wicket & (kind == 0)
                 np.add.at(bo["bl_wkts"], (idx[m], bslot[m]), 1.0)
                 fld = field_arr[rng.integers(0, len(field_arr), size=n)]
+                if catch_shares is not None:  # keeper and bowler take their real share of catches
+                    u = rng.random(n)
+                    others = field_arr[rng.integers(0, len(field_arr), size=n)]
+                    for _ in range(3):  # "others" must be neither the keeper nor this over's bowler
+                        bad = (others == keeper) | (others == bslot)
+                        if not bad.any():
+                            break
+                        others = np.where(bad, field_arr[rng.integers(0, len(field_arr), size=n)], others)
+                    fld = np.where(u < catch_shares[0], keeper,
+                                   np.where(u < catch_shares[0] + catch_shares[1], bslot, others))
                 m = wicket & (kind == 1)
                 np.add.at(bo["catches"], (idx[m], fld[m]), 1.0)
                 m = wicket & (kind == 2)
@@ -376,7 +388,16 @@ def pitch_report_ratios(model: RateModel, bowl: list, report: dict | None) -> np
 
 
 def _keeper(team: Team) -> int:
+    if team.keeper:
+        for i, p in enumerate(team.batting_order):
+            if p.name == team.keeper:
+                return i
     return next((i for i, p in enumerate(team.batting_order) if p.role == "WK"), 0)
+
+
+# Who takes the catch (from 28,301 T20 catches): the keeper 15.7%, the bowler (caught and bowled) 4.2%,
+# the other nine fielders share the rest. An even split would give everyone 9.1%.
+REAL_CATCH_SHARES = (0.157, 0.042)
 
 
 def _stats(bat_part, bo_part, played):
@@ -418,7 +439,8 @@ def calibrate_swings(model: RateModel, n: int = 1500) -> float:
 
 def simulate(model: RateModel, team_a: Team, team_b: Team, n_sims: int = 5000, seed: int = 0,
              venue: str | None = None, rules: dict = T20_RULES, league: str | None = None,
-             afternoon: bool = False, pitch_adj: np.ndarray | None = None, pitch_report: dict | None = None) -> dict:
+             afternoon: bool = False, pitch_adj: np.ndarray | None = None, pitch_report: dict | None = None,
+             catch_shares: tuple[float, float] | None = None) -> dict:
     """Simulate with team A batting first. Returns points for every player and win chances."""
     if model.mean_preserving and model.has("form") and model._calibrated_for != (tuple(model.sigmas), tuple(sorted(model.features))):
         calibrate_swings(model)
@@ -446,13 +468,13 @@ def simulate(model: RateModel, team_a: Team, team_b: Team, n_sims: int = 5000, s
                   else _plans(b_bowl, _weights(team_b, b_bowl), team_b.bowl_plan, cnt, rng, rl))
         ord_a = _emp_order(a_bat, team_a.pos_hist, cnt, rng) if rl and team_a.pos_hist else _order(len(a_bat), cnt, rng, rl)
         bs1, bo1, sc1, _ = _innings(model, venue, 1, a_bat, b_bowl, b_field, _keeper(team_b), plan_b,
-                                    ord_a, cnt, rng, None, (ra, rb), league, cond, afternoon, pitch_adj, pitch_report)
+                                    ord_a, cnt, rng, None, (ra, rb), league, cond, afternoon, pitch_adj, pitch_report, catch_shares)
         # innings 2: B chases (maybe with its impact batter), A bowls (maybe with its impact bowler)
         plan_a = (_phase_plans(a_bowl, team_a.phase_overs, cnt, rng) if rl and team_a.phase_overs and not team_a.bowl_plan
                   else _plans(a_bowl, _weights(team_a, a_bowl), team_a.bowl_plan, cnt, rng, rl))
         ord_b = _emp_order(b_bat, team_b.pos_hist, cnt, rng) if rl and team_b.pos_hist else _order(len(b_bat), cnt, rng, rl)
         bs2, bo2, sc2, _ = _innings(model, venue, 2, b_bat, a_bowl, a_field, _keeper(team_a), plan_a,
-                                    ord_b, cnt, rng, sc1 + 1, (rb, ra), league, cond, afternoon, pitch_adj, pitch_report)
+                                    ord_b, cnt, rng, sc1 + 1, (rb, ra), league, cond, afternoon, pitch_adj, pitch_report, catch_shares)
         played_a = np.ones((cnt, ra), dtype=bool)
         played_b = np.ones((cnt, rb), dtype=bool)
         if team_a.impact:

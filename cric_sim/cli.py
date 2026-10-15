@@ -118,6 +118,11 @@ def cmd_predict(a):
         print(f"\nPick value = {share:.0%} simulator + {1 - share:.0%} recent form")
     cap_val = pts.mean(axis=0) if cfg.get("captain_by") == "simulator" else None
     best = pick_team(players, values, risk=a.risk, captain_value=cap_val)
+    if a.teams > 1:
+        from .multi import diverse_teams
+        spread = a.spread if a.spread is not None else cfg.get("multi_team_spread", 0.3)
+        teams = diverse_teams(players, values.mean(axis=0), cap_val if cap_val is not None else values.mean(axis=0),
+                              pts.std(axis=0), n=a.teams, spread=spread, seed=a.seed)
     P = pts
     p_top1 = np.bincount(P.argmax(axis=1), minlength=P.shape[1]) / P.shape[0]
     p_top3 = np.bincount(np.argsort(-P, axis=1)[:, :3].ravel(), minlength=P.shape[1]) / P.shape[0]
@@ -125,6 +130,12 @@ def cmd_predict(a):
     print(f"  {'Player':<22}{'Sim avg':>8}{'Top scorer':>12}{'Top 3':>8}")
     for i in np.argsort(-P.mean(axis=0))[:6]:
         print(f"  {players[i].name:<22}{P[:, i].mean():>8.1f}{p_top1[i]:>12.0%}{p_top3[i]:>8.0%}")
+    if a.teams > 1:
+        print(f"\n{len(teams)} different teams (team 1 = the best single pick; the others each suit a different version "
+              f"of the match; spread {spread})")
+        for k, t in enumerate(teams, 1):
+            others = ", ".join(p.name for p in t["team"] if p is not t["captain"] and p is not t["vice_captain"])
+            print(f"  Team {k:2d} ({t['credits']:.1f} cr): C {t['captain'].name}, VC {t['vice_captain'].name} | {others}")
     print(f"\nBest XI ({best['credits']:.1f} credits, expected {best['expected_points']:.0f} pts)")
     for p in best["team"]:
         tag = " (C)" if p is best["captain"] else " (VC)" if p is best["vice_captain"] else ""
@@ -208,6 +219,8 @@ def main(argv=None):
             sp.add_argument("--afternoon", action="store_true", help="afternoon game (no evening dew); needs the daynight effect")
             sp.add_argument("--sims", type=int, default=5000)
             sp.add_argument("--risk", type=float, default=0.0, help="0 = safe, 1 = chase upside")
+            sp.add_argument("--teams", type=int, default=1, help="also list this many different teams (e.g. 3, 6, 11, 20)")
+            sp.add_argument("--spread", type=float, default=None, help="how far extra teams move from the main pick (default 0.3)")
         if name == "backtest":
             sp.add_argument("--n-test", type=int, default=150, help="how many of the latest matches to test")
             sp.add_argument("--min-history", type=int, default=100)

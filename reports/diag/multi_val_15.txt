@@ -1,0 +1,7 @@
+val2224: 219 matches, spread x1.5; best possible team averages 1121 points
+ teams entered  best of them  % of best possible  average team
+             1           732               65.3%           732
+             3           785               70.0%           674
+             6           824               73.5%           662
+            11           862               76.9%           661
+            20           889               79.3%           659
