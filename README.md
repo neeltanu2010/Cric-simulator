@@ -14,7 +14,7 @@ Ball-by-ball T20 simulator that predicts **Dream11 fantasy points for every play
 | Run outs | Own chance per ball, striker or non-striker. |
 | Impact player | A bowling sub can replace a batter who has batted; a batting sub can replace a bowler in the chase. Whether it happens is random per simulation (`p_used`). |
 | Dream11 points | Standard T20 scoring, including dot balls, maidens, economy / strike-rate bands, catches, stumpings, run outs. |
-| Team pick | Best XI under 100 credits, role limits, max 7 per team, captain (2x) and vice (1.5x). |
+| Team pick | Best XI under Dream11 rules: 100 credits, WK 1-4 / BAT 3-6 / AR 1-4 / BOWL 3-6, max 10 from one team, captain (2x) and vice (1.5x). |
 
 ## Use
 ```
@@ -124,6 +124,26 @@ Even the best possible captain/vice-captain *inside our XI* would add ~100 point
 but the favourite is the top scorer only ~10-15% of the time, so most of it is luck. `predict` now lists the captain
 candidates with their simulated chance of finishing as top scorer and in the top 3. Match winners stay close to a
 coin flip with this data; do not use the win chances for betting.
+
+## Dream11 credit rules
+Dream11 gives 100 credits for 11 players (average 9.09), allows up to 10 players from one real team, and sets credits per
+match in bands: premium 9.5-11.0 (marquee players, top-order batters, elite all-rounders), mid-tier 8.5-9.0, budget 7.0-8.0.
+The optimizer uses these rules. Past credits are not public, so the backtest estimates them from each player's recent-form
+rank inside the match using those bands (about 6 premium, 7 mid, 9 budget; average 8.6). Type the real credits in when you have them.
+
+Re-scored with these rules (same predictions, teams re-picked):
+
+| | 2022-24 | 2025-26 |
+|---|---:|---:|
+| Our team (avg points, C 2x, VC 1.5x) | 732.1 | 753.2 |
+| Recent-form rule | 686.6 | 691.2 |
+| Random valid team | 626.1 | 613.2 |
+| Best possible team | 1121.1 | 1142.5 |
+| Our team beats the form rule | 63% of matches | 68% |
+| Our team beats a random team | 79% | 82% |
+
+With realistic credit bands the budget bites harder; our team loses a few points but the form rule loses much more, so the
+gap grows (+45 and +62 points a match, from +30 and +39). The 10-per-team limit changes almost nothing.
 
 ## How the backtest stays honest
 - For each test match, the model is trained **only on matches before that date** (a test checks this).

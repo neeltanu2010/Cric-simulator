@@ -226,7 +226,7 @@ def test_optimizer_respects_rules(world):
     best = pick_team(sim["players"], sim["points"])
     team = best["team"]
     assert len(team) == 11 and best["credits"] <= 100
-    assert max(sum(p.team == t for p in team) for t in ("Team0", "Team1")) <= 7
+    assert max(sum(p.team == t for p in team) for t in ("Team0", "Team1")) <= 10
     assert best["captain"] in team and best["vice_captain"] in team and best["captain"] is not best["vice_captain"]
     for role, (lo, hi) in {"WK": (1, 4), "BAT": (3, 6), "AR": (1, 4), "BOWL": (3, 6)}.items():
         assert lo <= sum(p.role == role for p in team) <= hi
@@ -456,3 +456,25 @@ def test_captain_value_and_split_captaincy():
     assert c["captain"].name == "b2" and c["captain"] in c["team"]
     s = pick_team(players, value[None, :], split_cv=True)
     assert s["captain"].team != s["vice_captain"].team
+
+
+
+def test_credit_bands_match_dream11():
+    from cric_sim.lineup import credits_from_rank, estimate_credits
+    c = credits_from_rank(np.arange(22) / 21)
+    assert c.min() == 7.0 and c.max() == 11.0 and set(np.unique(c * 2) % 1) == {0.0}  # 0.5 steps
+    assert 5 <= (c >= 9.5).sum() <= 7 and 6 <= ((c >= 8.5) & (c <= 9.0)).sum() <= 8 and 8 <= (c <= 8.0).sum() <= 10
+    assert 8.4 <= c.mean() <= 8.8  # typical Dream11 match average
+    names = [f"p{i}" for i in range(22)]
+    cr = estimate_credits(names, {}, {n: float(i) for i, n in enumerate(names)}, {}, 30.0)
+    assert cr["p21"] == 11.0 and cr["p0"] == 7.0  # best recent form gets the top credit
+
+
+def test_team_limit_is_ten_per_side():
+    players = [Player(f"a{i}", r, 7.0, "A") for i, r in enumerate(["WK", "BAT", "BAT", "BAT", "AR", "BOWL", "BOWL", "BOWL", "AR", "BAT", "BOWL"])]
+    players += [Player(f"b{i}", r, 7.0, "B") for i, r in enumerate(["WK", "BAT", "BAT", "BAT", "AR", "BOWL", "BOWL", "BOWL", "AR", "BAT", "BOWL"])]
+    value = np.array([100.0] * 11 + [1.0] * 11)  # team A players are far better
+    t = pick_team(players, value[None, :])
+    assert sum(p.team == "A" for p in t["team"]) == 10  # Dream11 allows 10, not 11
+    t7 = pick_team(players, value[None, :], max_per_team=7)
+    assert sum(p.team == "A" for p in t7["team"]) == 7

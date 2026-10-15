@@ -1,6 +1,6 @@
 """Pick the best Dream11 team from simulated points.
 
-Rules used: 11 players, at most 100 credits, at most 7 from one team,
+Rules used (Dream11): 11 players, at most 100 credits, at most 10 from one real team,
 role limits (WK 1-4, BAT 3-6, AR 1-4, BOWL 3-6), one captain (2x points)
 and one vice-captain (1.5x points).
 """
@@ -12,7 +12,7 @@ from scipy.optimize import Bounds, LinearConstraint, milp
 ROLE_LIMITS = {"WK": (1, 4), "BAT": (3, 6), "AR": (1, 4), "BOWL": (3, 6)}
 
 
-def pick_team(players, points: np.ndarray, credit_cap: float = 100.0, max_per_team: int = 7,
+def pick_team(players, points: np.ndarray, credit_cap: float = 100.0, max_per_team: int = 10,
               risk: float = 0.0, role_limits: dict | None = None, captain_value: np.ndarray | None = None,
               split_cv: bool = False):
     """Choose the best XI.

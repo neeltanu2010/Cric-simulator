@@ -59,13 +59,22 @@ def form_points(stats: pd.DataFrame, roles: dict[str, str], decay: float = 0.9, 
     return out, role_mean, glob
 
 
+def credits_from_rank(pct) -> np.ndarray:
+    """Dream11-style credit bands from a 0-1 form rank inside the match (1 = best):
+    premium 9.5-11.0 (top ~25%), mid-tier 8.5-9.0 (next ~35%), budget 7.0-8.0 (bottom ~40%)."""
+    pct = np.asarray(pct, dtype=float)
+    cr = np.where(pct >= 0.75, 9.5 + (pct - 0.75) / 0.25 * 1.5,
+                  np.where(pct >= 0.40, 8.5 + (pct - 0.40) / 0.35 * 0.5, 7.0 + pct / 0.40 * 1.0))
+    return np.clip(np.round(cr * 2) / 2, 7.0, 11.0)
+
+
 def estimate_credits(names: list[str], roles: dict[str, str], form: dict[str, float], role_mean: dict, glob: float):
-    """Dream11 credits are not public history. Estimate from form rank inside this match:
-    ~11 for the top player down to ~7 for the weakest."""
+    """Real Dream11 credits are set per match and are not in any public history, so estimate them from each
+    player's recent-form rank among the 22, using Dream11's bands (premium 9.5-11, mid 8.5-9, budget 7-8).
+    Type the real credits in whenever you have them."""
     vals = np.array([form.get(n, role_mean.get(roles.get(n, "BAT"), glob)) for n in names])
     pct = vals.argsort().argsort() / max(len(names) - 1, 1)
-    cr = np.round((7 + 4 * pct ** 2) * 2) / 2
-    return {n: float(c) for n, c in zip(names, cr)}
+    return {n: float(c) for n, c in zip(names, credits_from_rank(pct))}
 
 
 def order_by_position(names: list[str], hist: dict[str, dict], roles: dict[str, str]) -> list[str]:
