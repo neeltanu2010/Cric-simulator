@@ -1,0 +1,45 @@
+Added 3 scorecard-only matches from data/manual/ind_wi_2026_t20i_2to4.json (they update form, batting positions and credits; ball-by-ball ratings are unchanged)
+Setting: configs/best.json  (simulator share 50% of the team pick)
+
+Ground: M Chinnaswamy Stadium  (25293 balls of data)  runs/over vs league +0.37, wicket rate x1.04, chasing side won 58% of 113 matches
+
+India (bats first) avg 231  win 55%   |   West Indies avg 195  win 44%
+
+Player                Role     Cr Sim avg  P10  P90   Form Pick value
+Abhishek Sharma       BAT    10.0   100.8    6  266   71.5       86.1
+SV Samson             WK      9.5    89.1    7  239   68.6       78.9
+Ishan Kishan          WK     10.5    71.7    5  182   75.9       73.8
+SD Hope               WK     11.0    70.7    6  173   70.7       70.7
+RL Chase              AR      9.5    67.3   10  141   63.0       65.2
+SS Iyer               BAT     9.0    62.8    5  154   63.3       63.0
+Nithish Kumar Reddy   BAT     9.0    64.3    6  139   57.8       61.0
+SO Hetmyer            BAT     8.0    65.5    4  175   56.2       60.8
+J Andrew              BAT     7.5    67.5    5  176   49.2       58.3
+AR Patel              BOWL    7.5    59.3    9  120   57.3       58.3
+S Joseph              BOWL    8.5    48.9    5  101   60.3       54.6
+G Motie               BOWL    8.0    50.3    4  107   56.6       53.5
+Tilak Varma           BAT     8.5    43.9    4  116   61.1       52.5
+SE Rutherford         BAT    10.5    41.7    4  119   62.8       52.2
+Arshdeep Singh        BOWL    7.5    54.5    6  111   49.8       52.2
+R Powell              BAT     7.0    54.1    4  147   45.6       49.9
+KMA Paul              BOWL    7.0    53.8    5  120   44.1       48.9
+Naman Dhir            BAT     7.0    49.6    4  132   46.1       47.9
+Prince Yadav          BOWL    7.0    49.5    5  105   45.0       47.3
+SK Springer           BOWL    7.5    43.3    2   95   50.8       47.1
+R Shepherd            BOWL    7.0    50.8    3  111   41.6       46.2
+MP Yadav              BOWL    7.0    48.5    5  103   43.3       45.9
+
+Pick value = 50% simulator + 50% recent form
+
+Best XI (100.0 credits, expected 850 pts)
+  Abhishek Sharma       BAT   India (C)
+  SV Samson             WK    India (VC)
+  Ishan Kishan          WK    India
+  SS Iyer               BAT   India
+  Nithish Kumar Reddy   BAT   India
+  AR Patel              BOWL  India
+  Arshdeep Singh        BOWL  India
+  SD Hope               WK    West Indies
+  SO Hetmyer            BAT   West Indies
+  RL Chase              AR    West Indies
+  S Joseph              BOWL  West Indies

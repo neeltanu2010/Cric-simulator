@@ -13,3 +13,4 @@ reports/tune*.log
 reports/diag/*.log
 reports/experiments/check_fix_*.log
 reports/diag/form_d095_k2.csv
+!data/manual/

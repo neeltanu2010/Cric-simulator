@@ -28,7 +28,21 @@ from .squads import load_squads
 def _load(a):
     balls, matches = load_many(a.data or ["data/ipl_json"])
     bf, st = prepare(balls, matches)
+    matches, st = _extras(a, matches, st)
     return balls, matches, bf, st
+
+
+def _extras(a, matches, st):
+    """Matches known only from published scorecards (``--extra-scorecards``)."""
+    paths = getattr(a, "extra_scorecards", None)
+    if not paths:
+        return matches, st
+    from .scorecards import add_scorecards
+    n0 = len(matches)
+    matches, st = add_scorecards(matches, st, paths)
+    print(f"Added {len(matches) - n0} scorecard-only matches from {', '.join(paths)} "
+          "(they update form, batting positions and credits; ball-by-ball ratings are unchanged)")
+    return matches, st
 
 
 def cmd_predict(a):
@@ -38,6 +52,7 @@ def cmd_predict(a):
         folders, only = POOL_FOLDERS[cfg["pool"]]
         balls, matches = load_many([f"data/{f}_json" for f in folders], full_members_only=only)
         bf, st = prepare(balls, matches)
+        matches, st = _extras(a, matches, st)
     else:
         a.data = a.data or ["data/ipl_json"]
         _, matches, bf, st = _load(a)
@@ -85,19 +100,22 @@ def cmd_predict(a):
     print(f"\n{team_a.name} (bats first) avg {sim['avg_score_a']:.0f}  win {sim['p_a_wins']:.0%}   |   "
           f"{team_b.name} avg {sim['avg_score_b']:.0f}  win {sim['p_b_wins']:.0%}\n")
     players, pts = sim["players"], sim["points"]
-    print(f"{'Player':<22}{'Role':<6}{'Cr':>5}{'Avg':>7}{'P10':>6}{'P90':>6}")
-    for i in np.argsort(-pts.mean(axis=0)):
-        p = players[i]
-        print(f"{p.name:<22}{p.role:<6}{p.credits:>5.1f}{pts[:, i].mean():>7.1f}"
-              f"{np.percentile(pts[:, i], 10):>6.0f}{np.percentile(pts[:, i], 90):>6.0f}")
-    values = pts
-    if share < 1.0:  # mix the simulator with each player's recent form, as chosen in the experiments
+    fv = None
+    if share < 1.0:  # recent form, the other half of the pick value
         from .lineup import form_points, history_table, infer_roles
         roles = infer_roles(history_table(st))
         form, role_mean, glob = form_points(st, roles, decay=cfg.get("mix_form_decay", 0.9))
         fv = np.array([form.get(p.name, role_mean.get(p.role, glob)) for p in players])
-        values = share * pts.mean(axis=0)[None, :] + (1 - share) * fv[None, :]
-        print(f"\nValue used to pick the team = {share:.0%} simulator + {1 - share:.0%} recent form")
+    value = pts.mean(axis=0) if fv is None else share * pts.mean(axis=0) + (1 - share) * fv
+    print(f"{'Player':<22}{'Role':<6}{'Cr':>5}{'Sim avg':>8}{'P10':>5}{'P90':>5}" + (f"{'Form':>7}{'Pick value':>11}" if fv is not None else ""))
+    for i in np.argsort(-value):
+        p = players[i]
+        extra = f"{fv[i]:>7.1f}{value[i]:>11.1f}" if fv is not None else ""
+        print(f"{p.name:<22}{p.role:<6}{p.credits:>5.1f}{pts[:, i].mean():>8.1f}"
+              f"{np.percentile(pts[:, i], 10):>5.0f}{np.percentile(pts[:, i], 90):>5.0f}" + extra)
+    values = pts if fv is None else value[None, :]
+    if fv is not None:
+        print(f"\nPick value = {share:.0%} simulator + {1 - share:.0%} recent form")
     best = pick_team(players, values, risk=a.risk)
     print(f"\nBest XI ({best['credits']:.1f} credits, expected {best['expected_points']:.0f} pts)")
     for p in best["team"]:
@@ -166,6 +184,8 @@ def main(argv=None):
                         help="one or more folders of Cricsheet JSON matches (all are used for training); "
                              "default: ipl_json, or the data pool named in configs/best.json for predict")
         sp.add_argument("--types-csv", default=None, help="CSV: name,bowl_type,role (your corrections)")
+        sp.add_argument("--extra-scorecards", nargs="+", default=None,
+                        help="JSON files of recent matches known only as scorecards (e.g. data/manual/*.json)")
         sp.add_argument("--seed", type=int, default=0)
         sp.set_defaults(fn=fn)
         if name == "predict":

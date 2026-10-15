@@ -1,0 +1,150 @@
+{
+ "venue": "M Chinnaswamy Stadium",
+ "team_a": {
+  "name": "West Indies",
+  "players": [
+   {
+    "name": "J Andrew",
+    "role": "BAT",
+    "credits": 7.5,
+    "bowls": false
+   },
+   {
+    "name": "SD Hope",
+    "role": "WK",
+    "credits": 11.0,
+    "bowls": false
+   },
+   {
+    "name": "SO Hetmyer",
+    "role": "BAT",
+    "credits": 8.0,
+    "bowls": false
+   },
+   {
+    "name": "RL Chase",
+    "role": "AR",
+    "credits": 9.5,
+    "bowls": true
+   },
+   {
+    "name": "R Powell",
+    "role": "BAT",
+    "credits": 7.0,
+    "bowls": false
+   },
+   {
+    "name": "SE Rutherford",
+    "role": "BAT",
+    "credits": 10.5,
+    "bowls": false
+   },
+   {
+    "name": "KMA Paul",
+    "role": "BOWL",
+    "credits": 7.0,
+    "bowls": true
+   },
+   {
+    "name": "R Shepherd",
+    "role": "BOWL",
+    "credits": 7.0,
+    "bowls": true
+   },
+   {
+    "name": "G Motie",
+    "role": "BOWL",
+    "credits": 8.0,
+    "bowls": true
+   },
+   {
+    "name": "SK Springer",
+    "role": "BOWL",
+    "credits": 7.5,
+    "bowls": true
+   },
+   {
+    "name": "S Joseph",
+    "role": "BOWL",
+    "credits": 8.5,
+    "bowls": true
+   }
+  ]
+ },
+ "team_b": {
+  "name": "India",
+  "players": [
+   {
+    "name": "Abhishek Sharma",
+    "role": "BAT",
+    "credits": 10.0,
+    "bowls": false
+   },
+   {
+    "name": "SV Samson",
+    "role": "WK",
+    "credits": 9.5,
+    "bowls": false
+   },
+   {
+    "name": "Ishan Kishan",
+    "role": "WK",
+    "credits": 10.5,
+    "bowls": false
+   },
+   {
+    "name": "SS Iyer",
+    "role": "BAT",
+    "credits": 9.0,
+    "bowls": false
+   },
+   {
+    "name": "Tilak Varma",
+    "role": "BAT",
+    "credits": 8.5,
+    "bowls": false
+   },
+   {
+    "name": "Naman Dhir",
+    "role": "BAT",
+    "credits": 7.0,
+    "bowls": false
+   },
+   {
+    "name": "Nithish Kumar Reddy",
+    "role": "BAT",
+    "credits": 9.0,
+    "bowls": true
+   },
+   {
+    "name": "AR Patel",
+    "role": "BOWL",
+    "credits": 7.5,
+    "bowls": true
+   },
+   {
+    "name": "Arshdeep Singh",
+    "role": "BOWL",
+    "credits": 7.5,
+    "bowls": true
+   },
+   {
+    "name": "Prince Yadav",
+    "role": "BOWL",
+    "credits": 7.0,
+    "bowls": true
+   },
+   {
+    "name": "MP Yadav",
+    "role": "BOWL",
+    "credits": 7.0,
+    "bowls": true
+   }
+  ]
+ },
+ "pitch": {
+  "scoring": "normal",
+  "spin": "normal",
+  "pace": "normal"
+ }
+}

@@ -101,8 +101,9 @@ def lineup_history(stats: pd.DataFrame, bph: pd.DataFrame, names: list[str], n_p
     ps = stats[stats["name"].isin(names)].sort_values("date")
     pos_hist = {n: g["pos"].dropna().tail(n_pos).tolist() for n, g in ps.groupby("name")}
     phase_ov = {}
+    known = set(bph["match_id"])  # scorecard-only matches have no phase split: leave them out here
     for n, g in ps.groupby("name"):
-        mids = g["match_id"].tail(n_overs)
+        mids = g.loc[g["match_id"].isin(known), "match_id"].tail(n_overs)
         b = bph[(bph["name"] == n) & bph["match_id"].isin(mids)]
         if len(mids):
             phase_ov[n] = tuple(b[[0, 1, 2]].sum().to_numpy() / len(mids))

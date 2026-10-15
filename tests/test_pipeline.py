@@ -415,3 +415,31 @@ def test_typed_pitch_report_moves_the_game(world):
     assert spin["avg_score_a"] < flat["avg_score_a"]
     with pytest.raises(ValueError):
         simulate(m, make_team(0), make_team(1), 10, 2, "Plain Ground", pitch_report={"scoring": "huge"})
+
+
+def test_scorecard_only_matches_feed_form_and_positions(world, tmp_path):
+    from cric_sim.scorecards import add_scorecards
+    from cric_sim.lineup import form_points, history_table, infer_roles
+    card = {"matches": [{
+        "match_id": "SC1", "date": "2099-01-01", "venue": "High Ground, Hiville", "league": "t20s",
+        "team_a": "Team0", "team_b": "Team1", "winner": "Team0",
+        "xi": {"Team0": [f"T0_P{k}" for k in range(11)], "Team1": [f"T1_P{k}" for k in range(11)]},
+        "batting": {"Team0": [["T0_P1", 120, 50, None, None, False], ["T0_P0", 10, 8, 1, 0, True]],
+                    "Team1": [["T1_P0", 5, 6, 0, 0, True]]},
+        "bowling": {"Team1": [["T1_P6", "4", 0, 30, 1]], "Team0": [["T0_P6", "3.3", 0, 20, 1]]},
+        "fielding": [["T1_P2", "catch"]], "bowled_lbw": {"T1_P6": 1}}]}
+    path = tmp_path / "card.json"
+    path.write_text(json.dumps(card))
+    bf, st = prepare(world["balls"], world["matches"])
+    m2, st2 = add_scorecards(world["matches"], st, [path])
+    assert len(m2) == len(world["matches"]) + 1 and (st2["match_id"] == "SC1").sum() == 22
+    r = st2[(st2.match_id == "SC1")].set_index("name")
+    assert r.loc["T0_P1", "pos"] == 0 and r.loc["T0_P1", "runs"] == 120 and not r.loc["T0_P1", "out"]
+    assert 0 < r.loc["T0_P1", "fours"] * 4 + r.loc["T0_P1", "sixes"] * 6 <= 120  # estimated boundaries fit the runs
+    assert r.loc["T0_P6", "bowl_balls"] == 21 and r.loc["T1_P6", "bl_wkts"] == 1 and r.loc["T1_P2", "catches"] == 1
+    roles = infer_roles(history_table(st))
+    before, _, _ = form_points(st, roles)
+    after, _, _ = form_points(st2, roles)
+    assert after["T0_P1"] > before["T0_P1"]  # a big recent innings lifts form
+    _, st3 = add_scorecards(m2, st2, [path])
+    assert (st3["match_id"] == "SC1").sum() == 22  # adding the same file twice changes nothing

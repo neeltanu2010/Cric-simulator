@@ -98,6 +98,13 @@ python -m cric_sim.cli predict squads/today.json            # add --recent-pitch
 ```
 The pitch report you type (`--pitch-scoring very high/high/normal/low/very low`, `--pitch-spin` / `--pitch-pace big/some/normal/little/none`, or numbers) moves the simulation, e.g. "high" scoring raised a first-innings estimate from 202 to 211. **This input is your judgement and could not be tested on past matches**, because no archive of pitch reports exists.
 
+## Adding recent matches that only exist as scorecards
+Cricsheet adds ball-by-ball files a day or more after a match (and is blocked from the cloud environment). Recent matches can be added from their published scorecards as a small JSON file (see `data/manual/ind_wi_2026_t20i_2to4.json`: batting rows in batting order, bowling rows, catches, bowled/lbw counts; unknown fours/sixes and dot balls are estimated). Pass it to any command with `--extra-scorecards`:
+```
+python -m cric_sim.cli predict squads/match.json --league t20s --extra-scorecards data/manual/ind_wi_2026_t20i_2to4.json
+```
+Scorecard matches update recent form, batting positions, roles and estimated credits. They do **not** update the ball-by-ball ratings; when Cricsheet publishes the matches, add the real files instead.
+
 ## How the backtest stays honest
 - For each test match, the model is trained **only on matches before that date** (a test checks this).
 - Batting order, bowlers, roles and credits are worked out from past matches only.

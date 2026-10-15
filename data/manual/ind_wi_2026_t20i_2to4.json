@@ -1,0 +1,78 @@
+{
+ "about": "India v West Indies 2026-27, 2nd-4th T20Is, from published scorecards (Cricinfo, ESPN, CricketWorld, Outlook India, CricketNews) gathered by web search on 2026-10-15. Batting rows are in batting order: [name, runs, balls, fours, sixes, out]. Bowling rows: [name, overs, maidens, runs, wickets]. null fours/sixes are estimated from the player's usual boundary share; dot balls are estimated from economy. Fields listed under 'estimated' are best guesses where no source gave the number.",
+ "matches": [
+  {
+   "match_id": "1529231", "date": "2026-10-09", "venue": "JSCA International Stadium Complex, Ranchi", "league": "t20s",
+   "team_a": "India", "team_b": "West Indies", "winner": "West Indies",
+   "xi": {
+    "India": ["SV Samson", "Abhishek Sharma", "Ishan Kishan", "SS Iyer", "Tilak Varma", "S Dube", "Naman Dhir", "AR Patel", "Arshdeep Singh", "Kuldeep Yadav", "MP Yadav"],
+    "West Indies": ["SD Hope", "K Pooran", "SO Hetmyer", "R Powell", "SE Rutherford", "R Shepherd", "RL Chase", "SK Springer", "AJ Hosein", "S Joseph", "G Motie"]
+   },
+   "batting": {
+    "India": [["Abhishek Sharma", 20, 12, 2, 1, true], ["SV Samson", 82, 41, 9, 4, true], ["Ishan Kishan", 43, 22, 6, 2, true],
+              ["SS Iyer", 40, 18, 3, 3, true], ["Tilak Varma", 44, 18, 3, 3, false], ["S Dube", 7, 10, 1, 0, true], ["Naman Dhir", 4, 3, null, null, false]],
+    "West Indies": [["SD Hope", 102, 45, 6, 9, false], ["K Pooran", 4, 4, null, null, true], ["SO Hetmyer", 0, 2, 0, 0, true],
+                    ["R Powell", 24, 15, null, null, true], ["SE Rutherford", 84, 37, 7, 7, true], ["R Shepherd", 34, 13, null, null, false]]
+   },
+   "bowling": {
+    "West Indies": [["RL Chase", "4", 0, 24, 3], ["SK Springer", "4", 0, 64, 2], ["AJ Hosein", "3", 0, 46, 0], ["R Shepherd", "3.4", 0, 47, 0],
+                    ["G Motie", "2", 0, 21, 0], ["S Joseph", "3", 0, 39, 0], ["R Powell", "0.2", 0, 7, 0]],
+    "India": [["Arshdeep Singh", "4", 0, 45, 0], ["Kuldeep Yadav", "4", 0, 53, 1], ["MP Yadav", "3", 0, 36, 3], ["AR Patel", "3.3", 0, 63, 0],
+              ["Naman Dhir", "2", 0, 25, 0], ["S Dube", "2", 0, 30, 0]]
+   },
+   "fielding": [["K Pooran", "catch"], ["G Motie", "catch"], ["SO Hetmyer", "catch"]],
+   "bowled_lbw": {"RL Chase": 2},
+   "estimated": ["Naman Dhir balls (3)", "K Pooran balls (4)", "SO Hetmyer balls (2)", "R Powell balls (15)", "Naman Dhir and S Dube overs split (2 each)", "fielders for 3 West Indies wickets unknown"]
+  },
+  {
+   "match_id": "1529232", "date": "2026-10-11", "venue": "Holkar Cricket Stadium, Indore", "league": "t20s",
+   "team_a": "India", "team_b": "West Indies", "winner": "India",
+   "xi": {
+    "India": ["SV Samson", "Abhishek Sharma", "Ishan Kishan", "SS Iyer", "Tilak Varma", "Naman Dhir", "Nithish Kumar Reddy", "AR Patel", "Arshdeep Singh", "Prince Yadav", "MP Yadav"],
+    "West Indies": ["SD Hope", "K Pooran", "SO Hetmyer", "R Powell", "SE Rutherford", "Quentin Sampson", "RL Chase", "KMA Paul", "SK Springer", "G Motie", "S Joseph"]
+   },
+   "batting": {
+    "India": [["Abhishek Sharma", 69, 30, null, null, true], ["SV Samson", 3, 6, 0, 0, true], ["Ishan Kishan", 37, 18, null, null, true],
+              ["SS Iyer", 1, 2, 0, 0, true], ["Tilak Varma", 28, 16, 4, 0, true], ["Naman Dhir", 10, 5, null, null, true],
+              ["Nithish Kumar Reddy", 21, 14, 3, 0, true], ["AR Patel", 20, 14, 2, 0, true], ["Arshdeep Singh", 11, 8, null, null, true],
+              ["Prince Yadav", 13, 6, 3, 0, false], ["MP Yadav", 0, 1, 0, 0, true]],
+    "West Indies": [["SD Hope", 5, 5, null, null, true], ["K Pooran", 42, 27, null, null, true], ["SO Hetmyer", 43, 26, null, null, true],
+                    ["R Powell", 5, 7, null, null, true], ["SE Rutherford", 32, 20, 2, 2, true], ["Quentin Sampson", 21, 15, 1, 1, true],
+                    ["KMA Paul", 10, 6, 0, 1, true], ["SK Springer", 35, 11, null, null, false]]
+   },
+   "bowling": {
+    "West Indies": [["RL Chase", "4", 0, 38, 2], ["S Joseph", "4", 0, 54, 2], ["KMA Paul", "4", 0, 38, 1], ["SK Springer", "4", 0, 50, 2], ["G Motie", "4", 0, 37, 1]],
+    "India": [["Arshdeep Singh", "4", 0, 44, 3], ["MP Yadav", "4", 0, 34, 0], ["Nithish Kumar Reddy", "2", 0, 19, 1], ["Naman Dhir", "3", 0, 39, 2],
+              ["AR Patel", "3", 0, 33, 1], ["Prince Yadav", "4", 0, 37, 0]]
+   },
+   "fielding": [["K Pooran", "catch"], ["SK Springer", "catch"], ["Ishan Kishan", "catch"], ["Tilak Varma", "catch"]],
+   "bowled_lbw": {"RL Chase": 1, "S Joseph": 1, "Arshdeep Singh": 1, "Naman Dhir": 1},
+   "estimated": ["fielder for the AR Patel run out unknown", "batting order below the top three is the likely order"]
+  },
+  {
+   "match_id": "1529233", "date": "2026-10-14", "venue": "Rajiv Gandhi International Stadium, Uppal, Hyderabad", "league": "t20s",
+   "team_a": "West Indies", "team_b": "India", "winner": "West Indies",
+   "xi": {
+    "West Indies": ["SD Hope", "J Andrew", "SO Hetmyer", "R Powell", "SE Rutherford", "R Shepherd", "RL Chase", "KMA Paul", "SK Springer", "G Motie", "S Joseph"],
+    "India": ["SV Samson", "Abhishek Sharma", "Ishan Kishan", "SS Iyer", "Tilak Varma", "Naman Dhir", "Nithish Kumar Reddy", "AR Patel", "Arshdeep Singh", "Prince Yadav", "MP Yadav"]
+   },
+   "batting": {
+    "West Indies": [["SD Hope", 102, 50, 4, 9, false], ["J Andrew", 21, 16, null, null, true], ["SO Hetmyer", 33, 12, 4, 2, true],
+                    ["R Powell", 24, 17, null, null, true], ["SE Rutherford", 49, 26, 4, 3, false]],
+    "India": [["SV Samson", 56, 23, null, null, true], ["Abhishek Sharma", 29, 24, null, null, true], ["Ishan Kishan", 6, 3, null, null, true],
+              ["SS Iyer", 16, 11, null, null, true], ["Tilak Varma", 43, 25, null, null, true], ["Naman Dhir", 0, 1, 0, 0, true],
+              ["Nithish Kumar Reddy", 41, 20, null, null, true], ["AR Patel", 3, 5, 0, 0, true], ["Prince Yadav", 0, 1, 0, 0, true],
+              ["Arshdeep Singh", 5, 4, null, null, true], ["MP Yadav", 0, 0, 0, 0, false]]
+   },
+   "bowling": {
+    "India": [["Arshdeep Singh", "4", 0, 52, 1], ["AR Patel", "4", 0, 45, 1], ["Prince Yadav", "4", 0, 36, 1], ["MP Yadav", "4", 0, 52, 0],
+              ["Nithish Kumar Reddy", "2", 0, 28, 0], ["Naman Dhir", "2", 0, 29, 0]],
+    "West Indies": [["KMA Paul", "4", 0, 41, 5], ["G Motie", "2", 0, 13, 2], ["S Joseph", "4", 0, 47, 0], ["RL Chase", "3", 0, 30, 0],
+                    ["R Shepherd", "3.3", 0, 45, 1], ["SK Springer", "3", 0, 39, 1]]
+   },
+   "fielding": [["SO Hetmyer", "catch"], ["SK Springer", "catch"], ["SE Rutherford", "catch"], ["Prince Yadav", "catch"], ["SD Hope", "stumping"]],
+   "bowled_lbw": {"AR Patel": 1},
+   "estimated": ["Prince Yadav balls (1)", "Arshdeep Singh balls (4, retired out)", "Nithish Kumar Reddy / Naman Dhir overs and runs split", "S Joseph overs (4)", "Chase / Shepherd / Springer overs and runs split", "fielders for 3 India wickets unknown"]
+  }
+ ]
+}
