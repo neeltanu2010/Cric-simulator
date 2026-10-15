@@ -28,5 +28,7 @@
   "test_xi_points": 760.6621621621622,
   "test_form_points": 717.0641891891892,
   "note": "all effects, 50% mix, form decay 0.9, generic lineup noise"
- }
+ },
+ "captain_by": "simulator",
+ "captain_note": "C/VC chosen by simulator average (team still picked by 50/50 value): IPL 2022-24 +1.6 pts/match, IPL 2025-26 +5.0"
 }

@@ -13,7 +13,8 @@ ROLE_LIMITS = {"WK": (1, 4), "BAT": (3, 6), "AR": (1, 4), "BOWL": (3, 6)}
 
 
 def pick_team(players, points: np.ndarray, credit_cap: float = 100.0, max_per_team: int = 7,
-              risk: float = 0.0, role_limits: dict | None = None):
+              risk: float = 0.0, role_limits: dict | None = None, captain_value: np.ndarray | None = None,
+              split_cv: bool = False):
     """Choose the best XI.
 
     ``points`` is (n_sims, n_players). ``risk`` sets what we maximise:
@@ -26,8 +27,10 @@ def pick_team(players, points: np.ndarray, credit_cap: float = 100.0, max_per_te
     std = points.std(axis=0)
     value = mean + risk * std
 
-    # variables: x (in team), c (captain), v (vice-captain)
-    cost = -np.concatenate([value, value, 0.5 * value])  # minimise negative
+    # variables: x (in team), c (captain), v (vice-captain). The captain slots can use their own value
+    # (for example chance of being the match's top scorer, scaled to points).
+    cap = value if captain_value is None else np.asarray(captain_value, dtype=float)
+    cost = -np.concatenate([value, cap, 0.5 * cap])  # minimise negative
     rows, lo, hi = [], [], []
 
     def add(row, low, high):
@@ -48,6 +51,9 @@ def pick_team(players, points: np.ndarray, credit_cap: float = 100.0, max_per_te
         add(np.concatenate([z, e, e]), 0, 1)
     for team in {p.team for p in players}:
         add(np.concatenate([[1.0 if p.team == team else 0.0 for p in players], z, z]), 0, max_per_team)
+        if split_cv:  # captain and vice-captain from different teams
+            t = np.array([1.0 if p.team == team else 0.0 for p in players])
+            add(np.concatenate([z, t, t]), 0, 1)
     for role, (lo_r, hi_r) in limits.items():
         add(np.concatenate([[1.0 if p.role == role else 0.0 for p in players], z, z]), lo_r, hi_r)
 
@@ -57,7 +63,7 @@ def pick_team(players, points: np.ndarray, credit_cap: float = 100.0, max_per_te
         if role_limits is None:
             # role guesses can be wrong (for example no wicket-keeper found); relax the limits
             return pick_team(players, points, credit_cap, max_per_team, risk,
-                             {r: (0, 11) for r in ROLE_LIMITS})
+                             {r: (0, 11) for r in ROLE_LIMITS}, captain_value, split_cv)
         raise RuntimeError(f"Could not build a valid team: {res.message}")
     x = np.round(res.x).astype(int)
     team = [i for i in range(n) if x[i]]

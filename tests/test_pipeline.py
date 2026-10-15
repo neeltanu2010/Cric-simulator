@@ -443,3 +443,16 @@ def test_scorecard_only_matches_feed_form_and_positions(world, tmp_path):
     assert after["T0_P1"] > before["T0_P1"]  # a big recent innings lifts form
     _, st3 = add_scorecards(m2, st2, [path])
     assert (st3["match_id"] == "SC1").sum() == 22  # adding the same file twice changes nothing
+
+
+def test_captain_value_and_split_captaincy():
+    players = [Player(f"a{i}", r, 8.0, "A") for i, r in enumerate(["WK", "BAT", "BAT", "BAT", "AR", "BOWL", "BOWL", "BOWL", "AR", "BAT", "BOWL"])]
+    players += [Player(f"b{i}", r, 8.0, "B") for i, r in enumerate(["WK", "BAT", "BAT", "BAT", "AR", "BOWL", "BOWL", "BOWL", "AR", "BAT", "BOWL"])]
+    value = np.array([50.0] * 22); value[1] = 90; value[2] = 85  # a1, a2 best by value
+    cap = value.copy(); cap[13] = 200  # b2 is the best captain by the captain value
+    base = pick_team(players, value[None, :])
+    assert base["captain"].name == "a1" and base["vice_captain"].name == "a2"
+    c = pick_team(players, value[None, :], captain_value=cap)
+    assert c["captain"].name == "b2" and c["captain"] in c["team"]
+    s = pick_team(players, value[None, :], split_cv=True)
+    assert s["captain"].team != s["vice_captain"].team

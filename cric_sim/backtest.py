@@ -75,6 +75,9 @@ class BTConfig:
     recent_pitch: bool = False  # adjust for how the ground has played in the last ``recent_days``
     recent_days: int = 60
     recent_S: float = 1500.0
+    captain_by: str = "value"  # "simulator": captain / vice-captain chosen by the simulator's average
+    recent_league_n: int = 0  # >0: adjust for how the league scored in its last N matches (scoring-level drift)
+    recent_league_S: float = 4000.0
     mix_form_decay: float = 0.9  # decay of the form estimate used INSIDE the simulator/form mix (the reported
     # "form baseline" always uses the fixed 0.9 rule so results stay comparable)
 
@@ -237,6 +240,12 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
             lo = r.date - pd.Timedelta(days=cfg.recent_days)
             rec = balls_f[(balls_f["venue_key"] == r.venue_key) & (balls_f["date"] < r.date) & (balls_f["date"] >= lo)]
             adj = model.recent_pitch(rec, cfg.recent_S) if len(rec) else None
+        if cfg.recent_league_n:
+            prev = ms.loc[(ms["league"] == r.league) & (ms["date"] < r.date), "match_id"].tail(cfg.recent_league_n)
+            rec = balls_f[balls_f["match_id"].isin(set(prev))]
+            if len(rec):
+                lg = model.recent_pitch(rec, cfg.recent_league_S)
+                adj = lg if adj is None else adj * lg
         sim = simulate(model, ta, tb, n_sims=cfg.sims, seed=int(rng.integers(1 << 31)), venue=r.venue_key, league=r.league,
                        afternoon=bool(getattr(r, "afternoon", False)), pitch_adj=adj)
         plist = sim["players"]
@@ -254,8 +263,16 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
         form_vec = np.array([form.get(n, role_mean.get(roles.get(n, "BAT"), glob)) for n in names])
         sp = spearmanr(mean[played], actual[played])[0] if played.sum() > 3 else np.nan
         sp_form = spearmanr(form_vec[played], actual[played])[0] if played.sum() > 3 else np.nan
+        wa = sim["p_a_wins"] / max(sim["p_a_wins"] + sim["p_b_wins"], 1e-9)
         p10_, p90_ = np.percentile(sim["points"], [10, 90], axis=0)
         p10, p90 = p10_, p90_
+        # captain signals: how often each player is the match's top scorer / in the top 3 across simulations
+        P = sim["points"]
+        R = P.shape[1]
+        p_top1 = np.bincount(P.argmax(axis=1), minlength=R) / P.shape[0]
+        p_top3 = np.bincount(np.argsort(-P, axis=1)[:, :3].ravel(), minlength=R) / P.shape[0]
+        p_ge75, p_ge100 = (P >= 75).mean(axis=0), (P >= 100).mean(axis=0)
+        p75_ = np.percentile(P, 75, axis=0)
         if collect is not None:
             real_pos = ms_stats["pos"] if "pos" in ms_stats.columns else None
             ap = points_parts(ms_stats.reset_index(), roles).set_index(ms_stats.index)
@@ -270,6 +287,9 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
                     "pred": float(mean[i]), "pred_std": float(sd[i]), "pred_p10": float(p10_[i]), "pred_p90": float(p90_[i]),
                     "pred_bat": float(sim["parts"]["bat"][:, i].mean()), "pred_bowl": float(sim["parts"]["bowl"][:, i].mean()),
                     "pred_field": float(sim["parts"]["field"][:, i].mean()),
+                    "p_top1": float(p_top1[i]), "p_top3": float(p_top3[i]), "p_ge75": float(p_ge75[i]),
+                    "p_ge100": float(p_ge100[i]), "pred_p75": float(p75_[i]),
+                    "team_win_p": float(wa if p_.team == ta.name else 1 - wa),
                     "form": float(form_vec[i]), "actual": float(actual[i]), "played": bool(played[i]),
                     "act_bat": float(ap["bat"].get(p_.name, np.nan)), "act_bowl": float(ap["bowl"].get(p_.name, np.nan)),
                     "act_field": float(ap["field"].get(p_.name, np.nan)),
@@ -289,7 +309,9 @@ def run_backtest(balls_f: pd.DataFrame, matches: pd.DataFrame, stats: pd.DataFra
         form_pick = pick_team(plist, form_vec[None, :])
         oracle = pick_team(plist, actual[None, :])
         mix_vec = np.array([mix_form.get(n, role_mean.get(roles.get(n, "BAT"), glob)) for n in names])
-        blends = {f"pts_blend{int(a * 100)}": _score_xi(pick_team(plist, (a * mean + (1 - a) * mix_vec)[None, :]), idx_of, actual)
+        cap_val = mean if cfg.captain_by == "simulator" else None
+        blends = {f"pts_blend{int(a * 100)}": _score_xi(pick_team(plist, (a * mean + (1 - a) * mix_vec)[None, :],
+                                                                  captain_value=cap_val), idx_of, actual)
                   for a in BLENDS}
         sp_blend = spearmanr((0.5 * mean + 0.5 * form_vec)[played], actual[played])[0] if played.sum() > 3 else np.nan
         rand = np.mean([_score_xi(pick_team(plist, rng.random((1, len(plist)))), idx_of, actual)

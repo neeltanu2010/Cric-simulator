@@ -116,7 +116,15 @@ def cmd_predict(a):
     values = pts if fv is None else value[None, :]
     if fv is not None:
         print(f"\nPick value = {share:.0%} simulator + {1 - share:.0%} recent form")
-    best = pick_team(players, values, risk=a.risk)
+    cap_val = pts.mean(axis=0) if cfg.get("captain_by") == "simulator" else None
+    best = pick_team(players, values, risk=a.risk, captain_value=cap_val)
+    P = pts
+    p_top1 = np.bincount(P.argmax(axis=1), minlength=P.shape[1]) / P.shape[0]
+    p_top3 = np.bincount(np.argsort(-P, axis=1)[:, :3].ravel(), minlength=P.shape[1]) / P.shape[0]
+    print("\nCaptain candidates (captain = highest simulator average; tested best on 2022-26 backtests)")
+    print(f"  {'Player':<22}{'Sim avg':>8}{'Top scorer':>12}{'Top 3':>8}")
+    for i in np.argsort(-P.mean(axis=0))[:6]:
+        print(f"  {players[i].name:<22}{P[:, i].mean():>8.1f}{p_top1[i]:>12.0%}{p_top3[i]:>8.0%}")
     print(f"\nBest XI ({best['credits']:.1f} credits, expected {best['expected_points']:.0f} pts)")
     for p in best["team"]:
         tag = " (C)" if p is best["captain"] else " (VC)" if p is best["vice_captain"] else ""

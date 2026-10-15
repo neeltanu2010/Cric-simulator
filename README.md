@@ -105,6 +105,26 @@ python -m cric_sim.cli predict squads/match.json --league t20s --extra-scorecard
 ```
 Scorecard matches update recent form, batting positions, roles and estimated credits. They do **not** update the ball-by-ball ratings; when Cricsheet publishes the matches, add the real files instead.
 
+## Captain choice and other weak points (reverse brainstorm, then tested)
+"How could we pick the worst captain?" -> steady players with no upside, players who barely bat or bowl, ignoring who
+is likely to win, C and VC from the same team, stale or one-off form, judging by averages. Each was turned into a rule
+and tested on IPL 2022-24 (training on 2018 onward), then checked once on IPL 2025-26.
+
+| Change | 2022-24 | 2025-26 | Kept? |
+|---|---|---|---|
+| **Captain/VC chosen by the simulator's average** (team still picked by the 50/50 value) | team +1.6 pts/match; captain in real top 3 24% -> 30% | team +5.0 (95% -1.5 to +11.5); captain = top scorer 11.5% -> 14.2% | **Yes** |
+| Captain by chance of being top scorer / top 3 / 100+ points (from the simulations) | slightly worse | - | No |
+| Learned captain models (logistic, boosted trees) | no gain / worse | - | No |
+| Captain and vice-captain from different teams | no gain | - | No |
+| Win prediction calibrated with recent and ground chase records | 51% -> 49% correct | 49% -> 55% (chasers won 58%) | No: not stable |
+| League scoring-level adjustment (last 20 matches) | bias +6.7 -> +10.8, team points lower | - | No |
+| Season-to-season correction of reported scores | no change in error | no change in error | No |
+
+Even the best possible captain/vice-captain *inside our XI* would add ~100 points a match: captaincy matters a lot,
+but the favourite is the top scorer only ~10-15% of the time, so most of it is luck. `predict` now lists the captain
+candidates with their simulated chance of finishing as top scorer and in the top 3. Match winners stay close to a
+coin flip with this data; do not use the win chances for betting.
+
 ## How the backtest stays honest
 - For each test match, the model is trained **only on matches before that date** (a test checks this).
 - Batting order, bowlers, roles and credits are worked out from past matches only.
