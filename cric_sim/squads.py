@@ -11,6 +11,7 @@
                "replaces": "RG Sharma", "p_used": 0.8}      # optional impact player
   },
   "team_b": {...}                     # team B chases
+  (optional per team: "keeper": "name of the player keeping wicket")
 }
 Names must match Cricsheet's spelling (for example "V Kohli", "JJ Bumrah").
 """
@@ -36,7 +37,7 @@ def _team(d: dict, chasing: bool) -> Team:
         # a bowling sub helps the team that bats first; a batting sub helps the chasing team
         mode = i.get("mode") or ("bat" if chasing else "bowl")
         impact = Impact(sub, mode, i["replaces"], float(i.get("p_used", 0.8)))
-    return Team(d["name"], players, bowlers, impact, d.get("bowl_plan"))
+    return Team(d["name"], players, bowlers, impact, d.get("bowl_plan"), keeper=d.get("keeper"))
 
 
 def load_squads(path: str | Path) -> tuple[Team, Team, str | None]:

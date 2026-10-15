@@ -30,8 +30,9 @@ def diverse_teams(players, value: np.ndarray, captain_value: np.ndarray, std: np
     while len(teams) < n and tries < max_tries:
         tries += 1
         z = rng.standard_normal(len(players))
-        v = np.maximum(value + spread * z * std, 0.0)
-        c = np.maximum(captain_value + spread * z * std, 0.0)
+        keep_out = value < -100  # players left out on purpose stay out
+        v = np.where(keep_out, value, np.maximum(value + spread * z * std, 0.0))
+        c = np.where(keep_out, captain_value, np.maximum(captain_value + spread * z * std, 0.0))
         t = pick_team(players, v[None, :], captain_value=c, **pick_kw)
         if _key(t) not in seen:
             seen.add(_key(t))

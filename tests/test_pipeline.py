@@ -491,3 +491,15 @@ def test_diverse_teams_are_valid_distinct_and_start_with_the_best_pick(world):
     assert len(keys) == len(teams) >= 4
     for t in teams:
         assert len(t["team"]) == 11 and t["credits"] <= 100 and t["captain"] in t["team"]
+
+
+def test_left_out_players_never_come_back(world):
+    from cric_sim.multi import diverse_teams
+    sim = simulate(world["model"], make_team(0), make_team(1), 400, 6, "Plain Ground")
+    pl, pts = sim["players"], sim["points"]
+    value = pts.mean(axis=0).copy()
+    star = int(np.argmax(value))
+    value[star] = -1e4
+    cap = value.copy()
+    for t in diverse_teams(pl, value, cap, pts.std(axis=0), n=8, spread=1.0, seed=2):
+        assert pl[star] not in t["team"]

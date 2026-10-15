@@ -97,7 +97,15 @@ def cmd_predict(a):
                   f"fours x{adj[4]:.2f}, sixes x{adj[5]:.2f}, wickets x{adj[6]:.2f}")
     sim = simulate(model, team_a, team_b, a.sims, a.seed, venue, league=a.league, afternoon=a.afternoon,
                    pitch_adj=adj, pitch_report=pitch or None)
-    print(f"\n{team_a.name} (bats first) avg {sim['avg_score_a']:.0f}  win {sim['p_a_wins']:.0%}   |   "
+    if a.toss_unknown:  # also play it with the other side batting first; the pick must work either way
+        sim2 = simulate(model, team_b, team_a, a.sims, a.seed + 1, venue, league=a.league, afternoon=a.afternoon,
+                        pitch_adj=adj, pitch_report=pitch or None)
+        col = {p.name: i for i, p in enumerate(sim2["players"])}
+        order = [col[p.name] for p in sim["players"]]
+        print(f"\nIf {team_b.name} bat first: {team_b.name} avg {sim2['avg_score_a']:.0f}  win {sim2['p_a_wins']:.0%}   |   "
+              f"{team_a.name} avg {sim2['avg_score_b']:.0f}  win {sim2['p_b_wins']:.0%}")
+        sim = dict(sim, points=np.vstack([sim["points"], sim2["points"][:, order]]))  # toss: 50/50 either way
+    print(f"\n{'If ' if a.toss_unknown else ''}{team_a.name} {'bat first' if a.toss_unknown else '(bats first)'}: {team_a.name} avg {sim['avg_score_a']:.0f}  win {sim['p_a_wins']:.0%}   |   "
           f"{team_b.name} avg {sim['avg_score_b']:.0f}  win {sim['p_b_wins']:.0%}\n")
     players, pts = sim["players"], sim["points"]
     fv = None
@@ -117,6 +125,13 @@ def cmd_predict(a):
     if fv is not None:
         print(f"\nPick value = {share:.0%} simulator + {1 - share:.0%} recent form")
     cap_val = pts.mean(axis=0) if cfg.get("captain_by") == "simulator" else None
+    if a.exclude:  # doubtful players: keep them out of every team
+        out = {x.strip() for x in a.exclude.split(",") if x.strip()}
+        bad = np.array([p.name in out for p in players])
+        if bad.any():
+            print("Left out of the picks:", ", ".join(p.name for p in players if p.name in out))
+            values = np.where(bad[None, :], -1e4, values)
+            cap_val = np.where(bad, -1e4, pts.mean(axis=0) if cap_val is None else cap_val)
     best = pick_team(players, values, risk=a.risk, captain_value=cap_val)
     if a.teams > 1:
         from .multi import diverse_teams
@@ -220,6 +235,8 @@ def main(argv=None):
             sp.add_argument("--sims", type=int, default=5000)
             sp.add_argument("--risk", type=float, default=0.0, help="0 = safe, 1 = chase upside")
             sp.add_argument("--teams", type=int, default=1, help="also list this many different teams (e.g. 3, 6, 11, 20)")
+            sp.add_argument("--toss-unknown", action="store_true", help="simulate both batting orders; pick a team that works either way")
+            sp.add_argument("--exclude", default=None, help="doubtful players to leave out of the picks (data names, comma separated)")
             sp.add_argument("--spread", type=float, default=None, help="how far extra teams move from the main pick (default 0.3)")
         if name == "backtest":
             sp.add_argument("--n-test", type=int, default=150, help="how many of the latest matches to test")
