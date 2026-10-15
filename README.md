@@ -88,6 +88,8 @@ New validation window: IPL 2022-24 (219 matches). 2025-26 stayed held out and wa
 
 A ground's recent scoring surprise barely predicts its next match (correlation +0.04 to +0.11), so data-made "pitch reports" carry little information. **Held-out IPL 2025-26 with confirmed lineups:** 755.9 points (66.1% of best possible), +39 over the form rule; vs the guessed-sub version: -1.4 (95% range -11 to +8), i.e. no measurable change.
 
+**Data fix (15 Oct 2026):** 125 T20 World Cup matches (2014 to March 2026) sit in both the World Cup and the T20 internationals downloads, and their balls were loaded twice, so every player's runs, wickets and catches in those games were doubled. This inflated recent form for international players. After the fix, the same held-out IPL 2025-26 test gives 752.3 points (65.8% of best possible; was 755.0), and the form rule drops from 716.6 to 698.4, so the lead over it grows from +38 to +54 points per match (95% range +29 to +79; better in 64% of matches). Results in this README from before this date were made with the doubled matches; IPL points themselves were never doubled.
+
 **Using them for a real match (after the toss):**
 ```
 # paste the announced XIs as written in the app; team A bats first; add the likely impact subs and real credits
