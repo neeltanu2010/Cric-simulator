@@ -1,0 +1,56 @@
+Added 3 scorecard-only matches from data/manual/ind_wi_2026_t20i_2to4.json (they update form, batting positions and credits; ball-by-ball ratings are unchanged)
+Setting: configs/best.json  (simulator share 50% of the team pick)
+
+Ground: M Chinnaswamy Stadium  (25293 balls of data)  runs/over vs league +0.37, wicket rate x1.04, chasing side won 58% of 113 matches
+
+If West Indies bat first: West Indies avg 205  win 32%   |   India avg 189  win 67%
+
+If India bat first: India avg 231  win 56%   |   West Indies avg 192  win 44%
+
+Player                Role     Cr Sim avg  P10  P90   Form Pick value
+Abhishek Sharma       BAT    10.0    93.2    6  240   71.5       82.3
+SV Samson             WK      9.5    84.3    6  222   68.6       76.5
+Ishan Kishan          WK     10.5    65.5    5  166   75.9       70.7
+SD Hope               WK     11.0    68.5    5  169   70.7       69.6
+SO Hetmyer            BAT     8.5    67.4    4  177   56.2       61.8
+RL Chase              AR     10.0    60.5    8  125   63.0       61.7
+Nithish Kumar Reddy   AR      9.0    63.2    7  133   57.8       60.5
+SS Iyer               BAT     9.0    56.4    4  143   63.3       59.8
+J Andrew              WK      8.0    68.2    5  178   49.2       58.7
+AR Patel              AR      8.5    60.0    9  120   57.3       58.7
+SE Rutherford         BAT    10.5    45.9    4  126   62.8       54.3
+S Joseph              BOWL    8.5    47.7    4  101   60.3       54.0
+Arshdeep Singh        BOWL    7.5    55.0    7  110   49.8       52.4
+R Powell              BAT     7.0    57.6    4  151   45.6       51.6
+G Motie               BOWL    8.5    45.3    4  100   56.6       51.0
+Tilak Varma           BAT     9.0    40.1    4  110   61.1       50.6
+Prince Yadav          BOWL    7.5    52.0    6  105   45.0       48.5
+KMA Paul              AR      7.5    52.5    5  119   44.1       48.3
+MP Yadav              BOWL    7.0    50.8    6  104   43.3       47.0
+R Shepherd            AR      7.0    51.3    3  117   41.6       46.5
+Naman Dhir            BAT     7.5    45.6    4  123   46.1       45.9
+SK Springer           AR      8.0    40.1    2   94   50.8       45.5
+
+Pick value = 50% simulator + 50% recent form
+
+Captain candidates (captain = highest simulator average; tested best on 2022-26 backtests)
+  Player                 Sim avg  Top scorer   Top 3
+  Abhishek Sharma           93.2         15%     29%
+  SV Samson                 84.3         12%     26%
+  SD Hope                   68.5          7%     19%
+  J Andrew                  68.2          8%     20%
+  SO Hetmyer                67.4          8%     20%
+  Ishan Kishan              65.5          7%     18%
+
+Best XI (100.0 credits, expected 818 pts)
+  SV Samson             WK    India (VC)
+  Abhishek Sharma       BAT   India (C)
+  Ishan Kishan          WK    India
+  SS Iyer               BAT   India
+  Nithish Kumar Reddy   AR    India
+  Arshdeep Singh        BOWL  India
+  SD Hope               WK    West Indies
+  J Andrew              WK    West Indies
+  SO Hetmyer            BAT   West Indies
+  G Motie               BOWL  West Indies
+  S Joseph              BOWL  West Indies
